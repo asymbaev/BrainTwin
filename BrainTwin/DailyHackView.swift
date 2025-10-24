@@ -145,9 +145,16 @@ struct DailyHackView: View {
         .onDisappear {
             audioPlayer?.stop()
             audioPlayer = nil
+            
+            // Auto-mark complete if they viewed it
+            if currentPage >= 2 && !viewModel.hasMarkedComplete {
+                Task {
+                    await viewModel.markAsComplete()
+                }
+            }
+            
             NotificationCenter.default.post(name: Notification.Name("RefreshDashboard"), object: nil)
-        }
-    }
+        }    }
     
     // Add this computed property
     private var pageProgress: Double {

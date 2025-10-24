@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainTabView: View {
     @State private var selectedTab = 0
+    @State private var showAccountView = false
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -33,7 +34,7 @@ struct MainTabView: View {
             }
             .tag(2)
             
-            // Tab 4: Settings (for future)
+            // Tab 4: Account - Shows as full page
             NavigationStack {
                 AccountView()
             }

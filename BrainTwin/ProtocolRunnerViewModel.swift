@@ -155,10 +155,11 @@ class ProtocolRunnerViewModel: ObservableObject {
     }
     
     private func markComplete() async {
-        guard let proto = currentProtocol else { return }
+        guard let proto = currentProtocol,
+              let userId = supabase.userId else { return }
         
         do {
-            print("✅ Marking complete...")
+            print("✅ Marking protocol complete...")
             
             struct UpdateData: Encodable {
                 let completed_at: String
@@ -167,13 +168,35 @@ class ProtocolRunnerViewModel: ObservableObject {
             let now = ISO8601DateFormatter().string(from: Date())
             let update = UpdateData(completed_at: now)
             
+            // Step 1: Mark protocol as complete
             try await supabase.client
                 .from("protocols")
                 .update(update)
                 .eq("id", value: proto.id)
                 .execute()
             
-            print("✅ Marked complete")
+            print("✅ Protocol marked complete!")
+            
+            // Step 2: CRITICAL - Call calculate-meter to update rewire progress
+            struct MeterRequest: Encodable {
+                let userId: String
+            }
+            
+            let meterRequest = MeterRequest(userId: userId)
+            let meterResponse: MeterResponse = try await supabase.client.functions.invoke(
+                "calculate-meter",
+                options: FunctionInvokeOptions(body: meterRequest)
+            )
+            
+            print("📊 Rewire meter updated!")
+            print("   Progress: \(meterResponse.progress)%")
+            print("   Skill: \(meterResponse.skillLevel)")
+            print("   Streak: \(meterResponse.streak) days")
+            
+            if let levelUpMsg = meterResponse.levelUpMessage {
+                print("🎉 \(levelUpMsg)")
+            }
+            
         } catch {
             print("❌ Mark complete error: \(error)")
         }

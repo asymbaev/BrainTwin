@@ -43,7 +43,7 @@ class DailyHackViewModel: ObservableObject {
                 let personalization: String?
                 let barrier: String
                 let isCompleted: Bool?
-                let audioUrls: [String]? // Add this line
+                let audioUrls: [String]?
             }
             
             let request = HackRequest(userId: userId)
@@ -61,7 +61,7 @@ class DailyHackViewModel: ObservableObject {
                 personalization: response.personalization,
                 barrier: response.barrier,
                 isCompleted: response.isCompleted,
-                audioUrls: response.audioUrls // Add this line
+                audioUrls: response.audioUrls
             )
             
             hasMarkedComplete = response.isCompleted ?? false
@@ -96,6 +96,7 @@ class DailyHackViewModel: ObservableObject {
             
             let update = UpdateTask(completed_at: now)
             
+            // Step 1: Mark the daily task as complete
             try await supabase.client
                 .from("daily_tasks")
                 .update(update)
@@ -103,13 +104,35 @@ class DailyHackViewModel: ObservableObject {
                 .eq("date", value: String(today))
                 .execute()
             
-            print("✅ Automatically marked complete on swipe!")
+            print("✅ Daily task marked complete!")
             
             hasMarkedComplete = true
             
+            // Step 2: CRITICAL - Call calculate-meter to update rewire progress
+            struct MeterRequest: Encodable {
+                let userId: String
+            }
+            
+            let meterRequest = MeterRequest(userId: userId)
+            let meterResponse: MeterResponse = try await supabase.client.functions.invoke(
+                "calculate-meter",
+                options: FunctionInvokeOptions(body: meterRequest)
+            )
+            
+            todaysProgress = meterResponse.progress
+            
+            print("📊 Rewire meter updated!")
+            print("   Progress: \(meterResponse.progress)%")
+            print("   Skill: \(meterResponse.skillLevel)")
+            print("   Streak: \(meterResponse.streak) days")
+            
+            if let levelUpMsg = meterResponse.levelUpMessage {
+                print("🎉 \(levelUpMsg)")
+            }
             
         } catch {
             print("❌ Complete error: \(error)")
+            errorMessage = "Failed to mark complete: \(error.localizedDescription)"
         }
     }
     
