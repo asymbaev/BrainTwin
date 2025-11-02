@@ -1,86 +1,120 @@
 import SwiftUI
+import Supabase
 
 struct ContentView: View {
     @StateObject private var supabase = SupabaseManager.shared
-    @State private var isLoading = false
-    @State private var errorText: String?
+    
+    @AppStorage("hasSeenIntro_v2") private var hasSeenIntro = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    
+    @State private var isCheckingOnboarding = false
+    @State private var errorText: String?
     
     var body: some View {
         Group {
-            if supabase.isSignedIn {
+            // 1) Show intro first
+            if !hasSeenIntro {
+                NeuroTwinIntroView {
+                    hasSeenIntro = true
+                    Task { await signInAndCheckOnboarding() }
+                }
+            
+            // 2) Checking onboarding status from database
+            } else if isCheckingOnboarding {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .tint(.white)
+                    Text("Loading your profile...")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+            
+            // 3) Signed-in routing based on onboarding status
+            } else if supabase.isSignedIn {
                 if hasCompletedOnboarding {
                     MainTabView()
                 } else {
+                    // Onboarding internally shows ProfileSetupAnimationView
                     OnboardingView(isOnboardingComplete: $hasCompletedOnboarding)
                 }
+            
+            // 4) Silent sign-in screen (fallback)
             } else {
-                signInView
-            }
-        }
-    }
-    
-    private var signInView: some View {
-        VStack(spacing: 30) {
-            Text("🧠")
-                .font(.system(size: 80))
-            
-            Text("Brain Twin")
-                .font(.largeTitle.bold())
-            
-            Text("Your AI neuroscience coach")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            
-            Spacer()
-            
-            Button {
-                signIn()
-            } label: {
-                if isLoading {
+                VStack(spacing: 12) {
                     ProgressView()
                         .tint(.white)
-                } else {
-                    Text("Get Started")
-                        .font(.headline)
+                    if let error = errorText {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+                .task { await signInAndCheckOnboarding() }
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .background(Color.blue)
-            .foregroundColor(.white)
-            .cornerRadius(16)
-            .padding(.horizontal, 32)
-            .disabled(isLoading)
-            
-            if let error = errorText {
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .padding()
-            }
-            
-            Spacer()
         }
-        .padding()
     }
     
-    private func signIn() {
-        isLoading = true
-        errorText = nil
+    // MARK: - Sign In & Check Onboarding Status
+    
+    /// Signs in user and checks onboarding_completed flag from Supabase
+    private func signInAndCheckOnboarding() async {
+        await MainActor.run {
+            isCheckingOnboarding = true
+            errorText = nil
+        }
         
-        Task {
-            do {
+        do {
+            // Step 1: Sign in if needed
+            if !supabase.isSignedIn {
+                print("🔐 Signing in anonymously...")
                 try await supabase.signInAnonymously()
-                isLoading = false
-            } catch {
-                errorText = error.localizedDescription
-                isLoading = false
             }
+            
+            // Step 2: Check onboarding status from Supabase database
+            guard let userId = supabase.userId else {
+                throw NSError(domain: "ContentView", code: 1, userInfo: [NSLocalizedDescriptionKey: "No user ID after sign in"])
+            }
+            
+            print("📊 Fetching onboarding status from database...")
+            let profile: UserProfile = try await supabase.client
+                .from("profiles")
+                .select("id, onboarding_completed")
+                .eq("id", value: userId)
+                .single()
+                .execute()
+                .value
+            
+            // Step 3: Sync database flag with local storage
+            await MainActor.run {
+                hasCompletedOnboarding = profile.onboarding_completed
+                print("✅ Onboarding status synced from database: \(profile.onboarding_completed)")
+            }
+            
+        } catch {
+            print("❌ Error checking onboarding: \(error)")
+            await MainActor.run {
+                errorText = error.localizedDescription
+                // Keep current local onboarding status as fallback
+            }
+        }
+        
+        await MainActor.run {
+            isCheckingOnboarding = false
         }
     }
 }
 
-#Preview {
-    ContentView()
+// MARK: - Helper Model
+
+struct UserProfile: Codable {
+    let id: String
+    let onboarding_completed: Bool
 }
+
+#Preview { ContentView() }

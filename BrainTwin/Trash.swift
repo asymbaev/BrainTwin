@@ -2,45 +2,44 @@ import SwiftUI
 import Combine
 import Supabase
 
-struct DashboardView: View {
+struct DashboardViewB: View {
     @StateObject private var hackViewModel = DailyHackViewModel()
     @EnvironmentObject var meterDataManager: MeterDataManager
-    
-    // Appearance override (System/Light/Dark)
-    @AppStorage("appearanceMode") private var appearanceMode = "system"
-    
     @State private var errorText: String?
     @State private var isCardExpanded = false
     @State private var weekDays: [(day: String, date: Int, isCompleted: Bool)] = []
+
     @State private var showListenMode = false
     @State private var showReadMode = false
     @State private var pulse = false
-    
+
+    // 🎨 NEURAL DEEP BLACK - Premium Minimal Design
+    private let neuralAccent = Color(red: 1.0, green: 0.84, blue: 0.04) // Electric Yellow #FFD60A
     private var supabase: SupabaseManager { SupabaseManager.shared }
-    
-    // Computed color scheme based on user preference
-    private var preferredColorScheme: ColorScheme? {
-        switch appearanceMode {
-        case "light": return .light
-        case "dark": return .dark
-        default: return nil // System
-        }
-    }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                // Adaptive background (warm off-white in light, black in dark)
-                Color.appBackground.ignoresSafeArea()
+                // Pure black background
+                Color.black.ignoresSafeArea()
                 
-                // Subtle depth gradient (only in dark mode)
-                darkModeDepthGradient
+                // Subtle radial depth
+                RadialGradient(
+                    colors: [
+                        Color(white: 0.04),
+                        Color.black
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 500
+                )
+                .ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 30) {
                         Text("Brain level")
                             .font(.title2.bold())
-                            .foregroundColor(.appTextPrimary)
+                            .foregroundColor(.white)
                             .padding(.top, 20)
 
                         meterSection
@@ -58,7 +57,6 @@ struct DashboardView: View {
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .preferredColorScheme(preferredColorScheme) // Apply user preference
             .task {
                 if meterDataManager.meterData == nil {
                     await meterDataManager.fetchMeterData()
@@ -107,26 +105,7 @@ struct DashboardView: View {
         }
     }
     
-    // MARK: - Dark Mode Depth Gradient (only shows in dark mode)
-    @ViewBuilder
-    private var darkModeDepthGradient: some View {
-        // Only add radial gradient in dark mode for depth
-        RadialGradient(
-            colors: [
-                Color(white: 0.04),
-                Color.black
-            ],
-            center: .center,
-            startRadius: 0,
-            endRadius: 500
-        )
-        .ignoresSafeArea()
-        .opacity(colorScheme == .dark ? 1 : 0)
-    }
-    
-    @Environment(\.colorScheme) var colorScheme
-    
-    // MARK: - Meter Section
+    // MARK: - Meter Section (fixes type-checking)
     @ViewBuilder
     private var meterSection: some View {
         if let data = meterDataManager.meterData {
@@ -134,12 +113,12 @@ struct DashboardView: View {
         } else if meterDataManager.isLoading {
             ProgressView()
                 .scaleEffect(1.5)
-                .tint(.appAccent)
+                .tint(neuralAccent)
                 .padding()
         }
     }
     
-    // MARK: - Error Section
+    // MARK: - Error Section (fixes type-checking)
     @ViewBuilder
     private var errorSection: some View {
         if let error = meterDataManager.errorMessage {
@@ -150,7 +129,7 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Hack Card
+    // MARK: - Hack Card (BROKEN INTO SMALLER PIECES)
     private var todayHackCard: some View {
         VStack(spacing: 0) {
             hackCardMainButton
@@ -159,18 +138,13 @@ struct DashboardView: View {
                 hackCardExpandedContent
             }
         }
-        .background(Color.appCardBackground)
+        .background(Color.white.opacity(0.03))
         .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.appCardBorder, lineWidth: 1)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
-        .shadow(color: shadowColor, radius: 10, y: 5)
-    }
-    
-    // Shadow adapts to mode
-    private var shadowColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.3) : Color.black.opacity(0.08)
+        .shadow(color: Color.black.opacity(0.3), radius: 10, y: 5)
     }
     
     // Hack Card - Main Button
@@ -202,11 +176,8 @@ struct DashboardView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
-                // Fallback gradient
                 LinearGradient(
-                    colors: colorScheme == .dark
-                        ? [Color(white: 0.08), Color(white: 0.04)]
-                        : [Color(hex: "#FFE7D6"), Color(hex: "#FFF8F0")],
+                    colors: [Color(white: 0.08), Color(white: 0.04)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -241,8 +212,8 @@ struct DashboardView: View {
         HStack {
             if meterDataManager.isTodayHackComplete {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.appAccent)
-                    .shadow(color: Color.appAccent.opacity(0.6), radius: 4)
+                    .foregroundColor(neuralAccent)
+                    .shadow(color: neuralAccent.opacity(0.6), radius: 4)
             }
 
             Text("YOUR BRAIN HACK • 1 MIN")
@@ -303,11 +274,11 @@ struct DashboardView: View {
                 .padding(.bottom, 16)
             }
         }
-        .background(Color.appGlassOverlay)
+        .background(Color.white.opacity(0.02))
         .transition(.move(edge: .top).combined(with: .opacity))
     }
     
-    // Listen Button (Primary - Yellow)
+    // Listen Button
     private var listenButton: some View {
         Button {
             showListenMode = true
@@ -317,16 +288,16 @@ struct DashboardView: View {
                 Text("Listen")
             }
             .font(.subheadline.bold())
-            .foregroundColor(colorScheme == .dark ? .black : .white)
+            .foregroundColor(.black)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
-            .background(Color.appAccent)
+            .background(neuralAccent)
             .cornerRadius(12)
-            .shadow(color: Color.appAccent.opacity(0.3), radius: 8)
+            .shadow(color: neuralAccent.opacity(0.4), radius: 8)
         }
     }
     
-    // Read Button (Secondary - Glass)
+    // Read Button
     private var readButton: some View {
         Button {
             showReadMode = true
@@ -336,14 +307,14 @@ struct DashboardView: View {
                 Text("Read")
             }
             .font(.subheadline.bold())
-            .foregroundColor(.appTextPrimary)
+            .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
-            .background(Color.appGlassOverlay)
+            .background(Color.white.opacity(0.1))
             .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.appCardBorder, lineWidth: 1)
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
             )
         }
     }
@@ -354,7 +325,7 @@ struct DashboardView: View {
             .foregroundColor(.white.opacity(0.9))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Color.white.opacity(0.15))
+            .background(Color.white.opacity(0.12))
             .cornerRadius(6)
     }
 
@@ -365,39 +336,34 @@ struct DashboardView: View {
                 // Background track
                 Circle()
                     .trim(from: 0, to: 0.75)
-                    .stroke(Color.appProgressTrack, lineWidth: 20)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 20)
                     .frame(width: 200, height: 200)
                     .rotationEffect(.degrees(135))
 
-                // Progress arc
+                // Progress arc with glow
                 Circle()
                     .trim(from: 0, to: (data.progress / 100) * 0.75)
                     .stroke(
-                        Color.appAccent,
+                        neuralAccent,
                         style: StrokeStyle(lineWidth: 20, lineCap: .round)
                     )
                     .frame(width: 200, height: 200)
                     .rotationEffect(.degrees(135))
-                    .shadow(color: progressGlowColor, radius: 10)
-                    .shadow(color: progressGlowColor, radius: 20)
+                    .shadow(color: neuralAccent.opacity(0.6), radius: 10)
+                    .shadow(color: neuralAccent.opacity(0.4), radius: 20)
                     .animation(.easeInOut(duration: 1.0), value: data.progress)
 
                 VStack(spacing: 4) {
                     Text("\(Int(data.progress))%")
                         .font(.system(size: 48, weight: .bold))
-                        .foregroundColor(.appTextPrimary)
+                        .foregroundColor(.white)
 
                     Text("Rewired")
                         .font(.subheadline)
-                        .foregroundColor(.appTextSecondary)
+                        .foregroundColor(.white.opacity(0.6))
                 }
             }
         }
-    }
-    
-    // Glow only in dark mode
-    private var progressGlowColor: Color {
-        colorScheme == .dark ? Color.appAccent.opacity(0.5) : Color.clear
     }
 
     // MARK: - Streak Calendar
@@ -407,11 +373,11 @@ struct DashboardView: View {
             weekDaysGrid
         }
         .padding()
-        .background(Color.appCardBackground)
+        .background(Color.white.opacity(0.03))
         .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.appCardBorder, lineWidth: 1)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
     }
     
@@ -421,7 +387,7 @@ struct DashboardView: View {
             ForEach(["S", "M", "T", "W", "T", "F", "S"], id: \.self) { day in
                 Text(day)
                     .font(.caption.bold())
-                    .foregroundColor(.appTextTertiary)
+                    .foregroundColor(.white.opacity(0.4))
                     .frame(maxWidth: .infinity)
             }
         }
@@ -442,16 +408,16 @@ struct DashboardView: View {
         VStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .fill(dayData.isCompleted ? Color.appAccent.opacity(0.12) : Color.clear)
+                    .fill(dayData.isCompleted ? neuralAccent.opacity(0.12) : Color.clear)
                     .frame(width: 44, height: 44)
                     .overlay(
                         Circle().stroke(
-                            dayData.isCompleted ? Color.appAccent : Color.appCardBorder,
+                            dayData.isCompleted ? neuralAccent : Color.white.opacity(0.15),
                             lineWidth: dayData.isCompleted ? 2.5 : 1.5
                         )
                     )
                     .shadow(
-                        color: dayData.isCompleted ? dayGlowColor : .clear,
+                        color: dayData.isCompleted ? neuralAccent.opacity(0.4) : .clear,
                         radius: dayData.isCompleted ? 8 : 0
                     )
 
@@ -460,17 +426,12 @@ struct DashboardView: View {
                 } else {
                     Text("\(dayData.date)")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.appTextPrimary)
+                        .foregroundColor(.white.opacity(0.9))
                 }
             }
             .frame(width: 44, height: 44)
             Color.clear.frame(height: 20)
         }
-    }
-    
-    // Day glow only in dark mode
-    private var dayGlowColor: Color {
-        colorScheme == .dark ? Color.appAccent.opacity(0.4) : Color.clear
     }
     
     // Completed Day Lightning Bolt
@@ -479,19 +440,14 @@ struct DashboardView: View {
             .resizable()
             .scaledToFit()
             .frame(width: 20, height: 20)
-            .foregroundColor(.appAccent)
-            .shadow(color: boltGlowColor, radius: 6)
+            .foregroundColor(neuralAccent)
+            .shadow(color: neuralAccent.opacity(0.8), radius: 6)
             .overlay(
                 Circle()
-                    .stroke(Color.appAccent.opacity(0.3), lineWidth: 2)
+                    .stroke(neuralAccent.opacity(0.3), lineWidth: 2)
                     .scaleEffect(pulse ? 1.2 : 0.95)
                     .opacity(pulse ? 0.0 : 0.7)
             )
-    }
-    
-    // Bolt glow stronger in dark mode
-    private var boltGlowColor: Color {
-        colorScheme == .dark ? Color.appAccent.opacity(0.8) : Color.appAccent.opacity(0.3)
     }
 
     private func generateWeekData() {

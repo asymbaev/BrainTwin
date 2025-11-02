@@ -11,8 +11,22 @@ struct HackChatView: View {
     let fromPage: HackPage
     @StateObject private var viewModel = ChatViewModel()
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) var colorScheme
+    
+    // ✅ ADD THIS: Appearance override (same as DailyHackView)
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    
     @State private var messageText = ""
     @FocusState private var isTextFieldFocused: Bool
+    
+    // ✅ ADD THIS: Computed color scheme based on user preference
+    private var preferredColorScheme: ColorScheme? {
+        switch appearanceMode {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil // System
+        }
+    }
     
     var suggestedPrompts: [String] {
         switch fromPage {
@@ -45,21 +59,21 @@ struct HackChatView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Top Navigation (only Back)
+            // Top Navigation (only Back) - ADAPTIVE
             HStack {
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.title3)
-                        .foregroundColor(.white)
-                        .padding(8) // a bit larger tap target
+                        .foregroundColor(colorScheme == .dark ? .white : .appTextPrimary)
+                        .padding(8)
                 }
 
                 Spacer()
             }
             .padding()
-            .background(Color.black.opacity(0.35)) // lighter tint (optional)
+            .background(Color.appCardBackground.opacity(0.5))
 
             ScrollView {
                 VStack(spacing: 20) {
@@ -67,17 +81,17 @@ struct HackChatView: View {
                     Spacer()
                         .frame(height: 120)
                     
-                    // Animated Brain Logo (only when no messages)
+                    // Animated Brain Logo (only when no messages) - ADAPTIVE
                     if viewModel.messages.isEmpty {
                         VStack(spacing: 20) {
                             Image(systemName: "brain.head.profile")
                                 .font(.system(size: 60))
-                                .foregroundColor(.white.opacity(0.9))
-                                .symbolEffect(.pulse, options: .repeating)  // Continuous animation
+                                .foregroundColor(colorScheme == .dark ? .white.opacity(0.9) : .appTextPrimary.opacity(0.8))
+                                .symbolEffect(.pulse, options: .repeating)
                             
                             Text("Ask me anything about this hack")
                                 .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(.appTextSecondary)
                                 .multilineTextAlignment(.center)
                         }
                         .padding(.bottom, 30)
@@ -98,9 +112,9 @@ struct HackChatView: View {
                     if viewModel.isLoading {
                         HStack {
                             ProgressView()
-                                .tint(.white)
+                                .tint(.appAccent)
                             Text("Thinking...")
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(.appTextSecondary)
                         }
                         .padding()
                     }
@@ -113,21 +127,31 @@ struct HackChatView: View {
             chatInputView
         }
         .background(
-            LinearGradient(
-                colors: [
-                    Color(red: 0.95, green: 0.85, blue: 0.35),  // Warm gold/yellow
-                    Color(red: 0.55, green: 0.45, blue: 0.75),  // Mid purple
-                    Color(red: 0.25, green: 0.15, blue: 0.45)   // Deep purple (dashboard color)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            ZStack {
+                // Adaptive background (same as dashboard)
+                Color.appBackground.ignoresSafeArea()
+                
+                // Subtle depth gradient (only in dark mode)
+                if colorScheme == .dark {
+                    RadialGradient(
+                        colors: [
+                            Color(white: 0.04),
+                            Color.black
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 500
+                    )
+                    .ignoresSafeArea()
+                }
+            }
         )
+        // ✅ ADD THIS: Apply user's preferred color scheme (just like DailyHackView)
+        .preferredColorScheme(preferredColorScheme)
         .navigationBarHidden(true)
     }
     
-    // MARK: - Suggested Prompts
+    // MARK: - Suggested Prompts - ADAPTIVE
     
     private var suggestedPromptsView: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -140,18 +164,22 @@ struct HackChatView: View {
                             HStack {
                                 Text(prompt)
                                     .font(.subheadline)
-                                    .foregroundColor(.white)
+                                    .foregroundColor(.appTextPrimary)
                                     .multilineTextAlignment(.leading)
                                 
                                 Spacer()
                                 
                                 Image(systemName: "arrow.up.right")
                                     .font(.caption)
-                                    .foregroundColor(.white.opacity(0.7))
+                                    .foregroundColor(.appTextSecondary)
                             }
                             .padding()
                             .frame(width: 280)
-                            .background(Color.white.opacity(0.15))
+                            .background(Color.appCardBackground)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.appCardBorder, lineWidth: 1)
+                            )
                             .cornerRadius(12)
                         }
                     }
@@ -161,22 +189,23 @@ struct HackChatView: View {
         }
     }
     
-    // MARK: - Chat Input
+    // MARK: - Chat Input - ADAPTIVE
     
     private var chatInputView: some View {
         VStack(spacing: 0) {
-            Divider().background(.white.opacity(0.2))
+            Divider()
+                .background(Color.appCardBorder)
 
             HStack(spacing: 12) {
-                // TextField with custom placeholder (icon optional—kept subtle)
+                // TextField with custom placeholder
                 ZStack(alignment: .leading) {
                     if messageText.isEmpty {
                         HStack(spacing: 8) {
                             Image(systemName: "text.cursor")
                                 .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(.appTextSecondary)
                             Text("Write any question here")
-                                .foregroundColor(.white.opacity(0.75))
+                                .foregroundColor(.appTextSecondary)
                                 .font(.subheadline)
                         }
                         .padding(.horizontal, 14)
@@ -184,43 +213,44 @@ struct HackChatView: View {
 
                     TextField("", text: $messageText, axis: .vertical)
                         .textFieldStyle(.plain)
-                        .foregroundColor(.white)
+                        .foregroundColor(.appTextPrimary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 12)
                         .focused($isTextFieldFocused)
                         .submitLabel(.send)
                         .onSubmit { sendMessage() }
                 }
-                .background(.white.opacity(0.12))
+                .background(Color.appCardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(.white.opacity(0.22), lineWidth: 1)
+                        .stroke(Color.appCardBorder, lineWidth: 1)
                 )
                 .cornerRadius(12)
 
-                // Send
+                // Send Button - ADAPTIVE
                 Button {
                     sendMessage()
                 } label: {
                     Image(systemName: "paperplane.fill")
                         .font(.title3)
-                        .foregroundColor(.white)
+                        .foregroundColor(messageText.isEmpty ? .appTextSecondary : (colorScheme == .dark ? .black : .white))
                         .frame(width: 44, height: 44)
-                        .background(messageText.isEmpty ? .white.opacity(0.12) : .blue)
+                        .background(messageText.isEmpty ? Color.appCardBackground : Color.appAccent)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.appCardBorder, lineWidth: messageText.isEmpty ? 1 : 0)
+                        )
                         .clipShape(Circle())
                 }
                 .disabled(messageText.isEmpty)
-                .opacity(messageText.isEmpty ? 0.7 : 1.0)
                 .animation(.easeInOut(duration: 0.15), value: messageText.isEmpty)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(.ultraThinMaterial) // lighter than the dark purple
+            .background(Color.appBackground)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
     }
-
-
     
     // MARK: - Actions
     

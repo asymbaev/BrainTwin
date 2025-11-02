@@ -1,78 +1,116 @@
 import SwiftUI
 
 struct SubscriptionView: View {
+    @Environment(\.colorScheme) var colorScheme
+    
+    // ✅ Appearance override (same as DailyHackView)
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    
     @State private var showMembershipDetails = false
     @State private var currentPlan: PremiumPlan = .monthly // Default, will fetch from backend
     
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                // Card Container with both items
-                VStack(spacing: 0) {
-                    // Membership Row
-                    Button {
-                        showMembershipDetails = true
-                    } label: {
-                        HStack(spacing: 16) {
-                            // Icon
-                            Image(systemName: "person.circle")
-                                .font(.system(size: 22))
-                                .foregroundColor(.secondary)
-                                .frame(width: 28)
-                            
-                            Text("Membership")
-                                .font(.body)
-                                .foregroundColor(.primary)
-                            
-                            Spacer()
-                            
-                            Text("Premium")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding()
-                        .contentShape(Rectangle())
-                    }
-                    
-                    Divider()
-                        .padding(.leading, 60)
-                    
-                    // Change Premium Plan Row
-                    Button {
-                        showMembershipDetails = true
-                    } label: {
-                        HStack(spacing: 16) {
-                            // Icon
-                            Image(systemName: "infinity")
-                                .font(.system(size: 22))
-                                .foregroundColor(.secondary)
-                                .frame(width: 28)
-                            
-                            Text("Change Premium Plan")
-                                .font(.body)
-                                .foregroundColor(.primary)
-                            
-                            Spacer()
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.secondary)
-                        }
-                        .padding()
-                        .contentShape(Rectangle())
-                    }
-                }
-                .background(Color(.systemBackground))
-                .cornerRadius(16)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-            }
-            .padding(.bottom, 40)
+    // ✅ Computed color scheme based on user preference
+    private var preferredColorScheme: ColorScheme? {
+        switch appearanceMode {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil // System
         }
-        .background(Color(.systemGray6))
+    }
+    
+    var body: some View {
+        ZStack {
+            // ✅ Adaptive background (same as DailyHackView pages 2-3)
+            Color.appBackground.ignoresSafeArea()
+            
+            // ✅ Subtle depth gradient (only in dark mode)
+            if colorScheme == .dark {
+                RadialGradient(
+                    colors: [
+                        Color(white: 0.04),
+                        Color.black
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 500
+                )
+                .ignoresSafeArea()
+            }
+            
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Card Container with both items
+                    VStack(spacing: 0) {
+                        // Membership Row
+                        Button {
+                            showMembershipDetails = true
+                        } label: {
+                            HStack(spacing: 16) {
+                                // Icon
+                                Image(systemName: "person.circle")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.appTextSecondary)
+                                    .frame(width: 28)
+                                
+                                Text("Membership")
+                                    .font(.body)
+                                    .foregroundColor(.appTextPrimary)
+                                
+                                Spacer()
+                                
+                                Text("Premium")
+                                    .font(.body)
+                                    .foregroundColor(.appTextSecondary)
+                            }
+                            .padding()
+                            .contentShape(Rectangle())
+                        }
+                        
+                        Divider()
+                            .background(Color.appCardBorder)
+                            .padding(.leading, 60)
+                        
+                        // Change Premium Plan Row
+                        Button {
+                            showMembershipDetails = true
+                        } label: {
+                            HStack(spacing: 16) {
+                                // Icon
+                                Image(systemName: "infinity")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.appTextSecondary)
+                                    .frame(width: 28)
+                                
+                                Text("Change Premium Plan")
+                                    .font(.body)
+                                    .foregroundColor(.appTextPrimary)
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.appTextSecondary)
+                            }
+                            .padding()
+                            .contentShape(Rectangle())
+                        }
+                    }
+                    .background(Color.appCardBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.appCardBorder, lineWidth: 1)
+                    )
+                    .cornerRadius(16)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                }
+                .padding(.bottom, 40)
+            }
+        }
         .navigationTitle("Subscription")
         .navigationBarTitleDisplayMode(.large)
+        // ✅ Apply user's preferred color scheme
+        .preferredColorScheme(preferredColorScheme)
         .navigationDestination(isPresented: $showMembershipDetails) {
             MembershipDetailsView(currentPlan: $currentPlan)
         }

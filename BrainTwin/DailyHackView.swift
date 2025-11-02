@@ -4,6 +4,11 @@ import AVFoundation
 struct DailyHackView: View {
     @StateObject private var viewModel: DailyHackViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) var colorScheme
+    
+    // Appearance override (same as dashboard)
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    
     @State private var currentPage = 0
     @State private var showShareSheet = false
     @State private var showChat = false
@@ -17,13 +22,22 @@ struct DailyHackView: View {
     @State private var showVoiceSelector = false
     @State private var selectedVoiceIndex = 0
     
-    // OpenAI TTS Voices - 3 Male + 3 Female
+    // OpenAI TTS Voices
     let availableVoices: [(name: String, voiceId: String)] = [
         ("Onyx (Male, Powerful)", "onyx"),
         ("Echo (Male, Deep)", "echo"),
         ("Shimmer (Female, Calm)", "shimmer"),
         ("Nova (Female, Warm)", "nova"),
     ]
+    
+    // Computed color scheme based on user preference
+    private var preferredColorScheme: ColorScheme? {
+        switch appearanceMode {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil // System
+        }
+    }
 
     init(autoPlayVoice: Bool = false, preloadedHack: BrainHack? = nil, preGeneratedAudioUrls: [String] = []) {
         self.autoPlayVoice = autoPlayVoice
@@ -50,8 +64,6 @@ struct DailyHackView: View {
                     print("🔄 Page changed from \(oldValue) to \(newValue)")
                 }
                 
-                // DOTS REMOVED - this VStack was deleted
-                
                 VStack {
                     HStack {
                         if currentPage > 0 {
@@ -62,7 +74,7 @@ struct DailyHackView: View {
                             } label: {
                                 Image(systemName: "chevron.left")
                                     .font(.title3)
-                                    .foregroundColor(.white)
+                                    .foregroundColor(currentPage == 0 ? .white : (colorScheme == .dark ? .white : .appTextPrimary))
                                     .padding()
                                     .background(.ultraThinMaterial)
                                     .clipShape(Circle())
@@ -79,7 +91,7 @@ struct DailyHackView: View {
                         } label: {
                             Image(systemName: "xmark")
                                 .font(.title3)
-                                .foregroundColor(.white)
+                                .foregroundColor(currentPage == 0 ? .white : (colorScheme == .dark ? .white : .appTextPrimary))
                                 .padding()
                                 .background(.ultraThinMaterial)
                                 .clipShape(Circle())
@@ -97,12 +109,12 @@ struct DailyHackView: View {
             } else if let error = viewModel.errorMessage {
                 errorView(error: error)
             } else {
-                // Loading
                 ProgressView()
                     .scaleEffect(1.5)
                     .tint(.white)
             }
         }
+        .preferredColorScheme(preferredColorScheme)
         .navigationBarHidden(true)
         .sheet(isPresented: $showShareSheet) {
             if let hack = viewModel.todaysHack {
@@ -146,7 +158,6 @@ struct DailyHackView: View {
             audioPlayer?.stop()
             audioPlayer = nil
             
-            // Auto-mark complete if they viewed it
             if currentPage >= 2 && !viewModel.hasMarkedComplete {
                 Task {
                     await viewModel.markAsComplete()
@@ -154,9 +165,9 @@ struct DailyHackView: View {
             }
             
             NotificationCenter.default.post(name: Notification.Name("RefreshDashboard"), object: nil)
-        }    }
+        }
+    }
     
-    // Add this computed property
     private var pageProgress: Double {
         switch currentPage {
         case 0: return 35.0
@@ -173,7 +184,6 @@ struct DailyHackView: View {
             Spacer()
             
             HStack(spacing: 40) {
-                // Voice Selector Button - Re-enabled
                 Button {
                     showVoiceSelector = true
                 } label: {
@@ -185,7 +195,6 @@ struct DailyHackView: View {
                         .clipShape(Circle())
                 }
                 
-                // Play/Pause Button
                 Button {
                     if isPlaying {
                         pauseSpeech()
@@ -213,7 +222,6 @@ struct DailyHackView: View {
                     }
                 }
                 
-                // Replay Button
                 Button {
                     replaySpeech()
                 } label: {
@@ -236,7 +244,6 @@ struct DailyHackView: View {
                     isPlaying = false
                     isLoadingAudio = false
                     
-                    // Regenerate with new voice
                     Task {
                         await regenerateWithNewVoice()
                     }
@@ -288,7 +295,6 @@ struct DailyHackView: View {
         print("🎵 Audio URLs available: \(preGeneratedAudioUrls.count)")
         print("🎵 Current page: \(currentPage)")
         
-        // Check if we have pre-generated audio URL for this page
         if currentPage < preGeneratedAudioUrls.count && !preGeneratedAudioUrls.isEmpty {
             let audioUrl = preGeneratedAudioUrls[currentPage]
             print("🚀 Downloading pre-generated audio from: \(audioUrl)")
@@ -325,7 +331,6 @@ struct DailyHackView: View {
                 }
             }
         } else {
-            // FALLBACK: Generate audio on-the-fly
             print("📡 No pre-generated audio - generating on-the-fly")
             
             isLoadingAudio = true
@@ -460,7 +465,7 @@ struct DailyHackView: View {
         return data
     }
     
-    // MARK: - Page 1: The Hack Quote
+    // MARK: - Page 1: The Hack Quote (UNCHANGED - EXACTLY AS ORIGINAL)
     
     private func page1HackQuote(hack: BrainHack) -> some View {
         GeometryReader { geometry in
@@ -519,7 +524,7 @@ struct DailyHackView: View {
                     
                     Spacer()
                     
-                    bottomButtons(isLastPage: false)
+                    bottomButtons(isLastPage: false, isPage1: true)
                         .frame(maxWidth: geometry.size.width)
                         .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? 10 : 30)
                 }
@@ -529,25 +534,30 @@ struct DailyHackView: View {
         .ignoresSafeArea()
     }
     
-    // MARK: - Page 2: The Science
+    // MARK: - Page 2: The Science (UPDATED TO ADAPTIVE)
     
     private func page2Science(hack: BrainHack) -> some View {
         GeometryReader { geometry in
             ZStack {
-                // NEW: Deep blue gradient for neuroscience
-                LinearGradient(
-                                colors: [
-                                    Color(red: 0.95, green: 0.85, blue: 0.35),  // Warm gold/yellow
-                                    Color(red: 0.55, green: 0.45, blue: 0.75),  // Mid purple
-                                    Color(red: 0.25, green: 0.15, blue: 0.45)   // Deep purple (dashboard color)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                .ignoresSafeArea()
+                // Adaptive background (same as dashboard)
+                Color.appBackground.ignoresSafeArea()
+                
+                // Subtle depth gradient (only in dark mode)
+                if colorScheme == .dark {
+                    RadialGradient(
+                        colors: [
+                            Color(white: 0.04),
+                            Color.black
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 500
+                    )
+                    .ignoresSafeArea()
+                }
                 
                 VStack(spacing: 0) {
-                    topSection(progress: viewModel.todaysProgress ?? 0)
+                    topSectionPages23(progress: viewModel.todaysProgress ?? 0)
                     
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 20) {
@@ -556,16 +566,20 @@ struct DailyHackView: View {
                                 Text("THE NEUROSCIENCE • 3 MIN")
                                     .font(.caption.bold())
                             }
-                            .foregroundColor(.white)
+                            .foregroundColor(.appTextPrimary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
-                            .background(.ultraThinMaterial)
+                            .background(Color.appCardBackground)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color.appCardBorder, lineWidth: 1)
+                            )
                             .cornerRadius(20)
                             .padding(.top, 20)
                             
                             Text("In \(hack.hackName), we target specific brain mechanisms.")
                                 .font(.system(size: 20, weight: .semibold))
-                                .foregroundColor(.white)
+                                .foregroundColor(.appTextPrimary)
                                 .multilineTextAlignment(.center)
                                 .lineSpacing(4)
                                 .padding(.horizontal, 24)
@@ -574,7 +588,7 @@ struct DailyHackView: View {
                             
                             Text(hack.neuroscience)
                                 .font(.system(size: 18))
-                                .foregroundColor(.white.opacity(0.9))
+                                .foregroundColor(.appTextSecondary)
                                 .multilineTextAlignment(.center)
                                 .lineSpacing(6)
                                 .padding(.horizontal, 24)
@@ -584,7 +598,7 @@ struct DailyHackView: View {
                             if let personalization = hack.personalization, !personalization.isEmpty {
                                 Text(personalization)
                                     .font(.system(size: 18))
-                                    .foregroundColor(.white.opacity(0.9))
+                                    .foregroundColor(.appTextSecondary)
                                     .multilineTextAlignment(.center)
                                     .lineSpacing(6)
                                     .padding(.horizontal, 24)
@@ -597,7 +611,7 @@ struct DailyHackView: View {
                         .padding(.bottom, autoPlayVoice ? 180 : 30)
                     }
                     
-                    bottomButtons(isLastPage: false)
+                    bottomButtons(isLastPage: false, isPage1: false)
                         .frame(maxWidth: geometry.size.width)
                         .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? 10 : 30)
                 }
@@ -607,26 +621,30 @@ struct DailyHackView: View {
         .ignoresSafeArea()
     }
     
-    // MARK: - Page 3: How to Apply
+    // MARK: - Page 3: How to Apply (UPDATED TO ADAPTIVE)
     
     private func page3Application(hack: BrainHack) -> some View {
         GeometryReader { geometry in
             ZStack {
-                // NEW: Dark teal/cyan gradient for action
-                LinearGradient(
-                                colors: [
-                                    Color(red: 0.95, green: 0.85, blue: 0.35),  // Warm gold/yellow
-                                    Color(red: 0.55, green: 0.45, blue: 0.75),  // Mid purple
-                                    Color(red: 0.25, green: 0.15, blue: 0.45)   // Deep purple (dashboard color)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                .ignoresSafeArea()
+                // Adaptive background (same as dashboard)
+                Color.appBackground.ignoresSafeArea()
                 
-                // Keep the rest of page 3 the same
+                // Subtle depth gradient (only in dark mode)
+                if colorScheme == .dark {
+                    RadialGradient(
+                        colors: [
+                            Color(white: 0.04),
+                            Color.black
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 500
+                    )
+                    .ignoresSafeArea()
+                }
+                
                 VStack(spacing: 0) {
-                    topSection(progress: viewModel.todaysProgress ?? 0)
+                    topSectionPages23(progress: viewModel.todaysProgress ?? 0)
                     
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 20) {
@@ -635,21 +653,25 @@ struct DailyHackView: View {
                                 Text("HOW TO APPLY • 2 MIN")
                                     .font(.caption.bold())
                             }
-                            .foregroundColor(.white)
+                            .foregroundColor(.appTextPrimary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
-                            .background(.ultraThinMaterial)
+                            .background(Color.appCardBackground)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color.appCardBorder, lineWidth: 1)
+                            )
                             .cornerRadius(20)
                             .padding(.top, 20)
                             
                             Text("Your Action Plan")
                                 .font(.system(size: 22, weight: .bold))
-                                .foregroundColor(.white)
+                                .foregroundColor(.appTextPrimary)
                                 .frame(maxWidth: geometry.size.width - 48)
                             
                             Text(hack.explanation)
                                 .font(.system(size: 18))
-                                .foregroundColor(.white)
+                                .foregroundColor(.appTextPrimary)
                                 .multilineTextAlignment(.center)
                                 .lineSpacing(6)
                                 .padding(.horizontal, 24)
@@ -659,17 +681,21 @@ struct DailyHackView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Today's Challenge:")
                                     .font(.headline)
-                                    .foregroundColor(.yellow)
+                                    .foregroundColor(.appAccent)
                                 
                                 Text("Apply this hack when you face \(hack.barrier) today. Notice how your brain responds differently.")
                                     .font(.system(size: 16))
-                                    .foregroundColor(.white.opacity(0.9))
+                                    .foregroundColor(.appTextSecondary)
                                     .lineSpacing(4)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             .padding(16)
                             .frame(maxWidth: geometry.size.width - 64)
-                            .background(.ultraThinMaterial)
+                            .background(Color.appCardBackground)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.appCardBorder, lineWidth: 1)
+                            )
                             .cornerRadius(12)
                             .padding(.horizontal, 24)
                             .padding(.top, 12)
@@ -678,7 +704,7 @@ struct DailyHackView: View {
                         .padding(.bottom, autoPlayVoice ? 180 : 30)
                     }
                     
-                    bottomButtons(isLastPage: true)
+                    bottomButtons(isLastPage: true, isPage1: false)
                         .frame(maxWidth: geometry.size.width)
                         .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? 10 : 30)
                 }
@@ -688,7 +714,7 @@ struct DailyHackView: View {
         .ignoresSafeArea()
     }
     
-    // MARK: - Top Section
+    // MARK: - Top Section (FOR PAGE 1 - WHITE TEXT)
     
     private func topSection(progress: Double) -> some View {
         VStack(spacing: 8) {
@@ -713,19 +739,49 @@ struct DailyHackView: View {
                 .tint(.yellow)
                 .padding(.horizontal, 32)
         }
-        .padding(.top, 110)  // More padding to push below nav buttons
+        .padding(.top, 110)
         .padding(.bottom, 12)
     }
-    // MARK: - Bottom Buttons
     
-    private func bottomButtons(isLastPage: Bool) -> some View {
+    // MARK: - Top Section (FOR PAGES 2 & 3 - ADAPTIVE TEXT)
+    
+    private func topSectionPages23(progress: Double) -> some View {
+        VStack(spacing: 8) {
+            Text("Today's Brain Hack")
+                .font(.headline)
+                .foregroundColor(.appTextPrimary)
+            
+            HStack {
+                Text("Progress today")
+                    .font(.caption)
+                    .foregroundColor(.appTextSecondary)
+                
+                Spacer()
+                
+                Text("\(Int(pageProgress))%")
+                    .font(.caption.bold())
+                    .foregroundColor(.appAccent)
+            }
+            .padding(.horizontal, 32)
+            
+            ProgressView(value: pageProgress, total: 100)
+                .tint(.appAccent)
+                .padding(.horizontal, 32)
+        }
+        .padding(.top, 110)
+        .padding(.bottom, 12)
+    }
+    
+    // MARK: - Bottom Buttons (UPDATED WITH ADAPTIVE COLORS)
+    
+    private func bottomButtons(isLastPage: Bool, isPage1: Bool) -> some View {
         HStack(spacing: 8) {
             Button {
                 showShareSheet = true
             } label: {
                 Image(systemName: "square.and.arrow.up")
                     .font(.title2)
-                    .foregroundColor(.white)
+                    .foregroundColor(isPage1 ? .white : (colorScheme == .dark ? .white : .appTextPrimary))
                     .frame(width: 56, height: 56)
                     .background(.ultraThinMaterial)
                     .cornerRadius(14)
@@ -747,7 +803,7 @@ struct DailyHackView: View {
                     Image(systemName: "message.fill")
                 }
                 .font(.subheadline.bold())
-                .foregroundColor(.white)
+                .foregroundColor(isPage1 ? .white : (colorScheme == .dark ? .white : .appTextPrimary))
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
                 .background(.ultraThinMaterial)
@@ -763,9 +819,9 @@ struct DailyHackView: View {
                 } label: {
                     Text("Done")
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
                         .frame(width: 72, height: 56)
-                        .background(Color(red: 0.95, green: 0.85, blue: 0.35))
+                        .background(Color.appAccent)
                         .cornerRadius(14)
                 }
             } else {
@@ -776,10 +832,12 @@ struct DailyHackView: View {
                 } label: {
                     Image(systemName: "arrow.right")
                         .font(.title2.bold())
-                        .foregroundColor(.white)
+                        .foregroundColor(isPage1 ? .white : (colorScheme == .dark ? .white : .appTextPrimary))
                         .frame(width: 72, height: 56)
-                        .background(Color.white.opacity(0.3))
-                        .cornerRadius(14)
+                        .background(.ultraThinMaterial)
+                        .overlay(
+                            isPage1 ? Color.white.opacity(0.3) : Color.clear
+                        )                        .cornerRadius(14)
                 }
             }
         }

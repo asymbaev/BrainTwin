@@ -1,34 +1,62 @@
 import SwiftUI
+import Supabase
 
 struct InsightsView: View {
-    @StateObject private var viewModel = InsightsViewModel()
+    @EnvironmentObject var meterDataManager: MeterDataManager
+    @Environment(\.colorScheme) var colorScheme
+    
+    // ✅ Appearance override (same as DailyHackView)
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    
+    @State private var completedDates: [Date] = []
+    @State private var isLoading = false
     @State private var currentMonth = Date()
+    
+    // Initialize supabase properly
+    private var supabase: SupabaseManager {
+        SupabaseManager.shared
+    }
+    
+    // ✅ Computed color scheme based on user preference
+    private var preferredColorScheme: ColorScheme? {
+        switch appearanceMode {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil // System
+        }
+    }
     
     var body: some View {
         ZStack {
-            // Same gradient as Dashboard
-            LinearGradient(
-                colors: [
-                    Color(red: 0.15, green: 0.1, blue: 0.35),
-                    Color(red: 0.08, green: 0.05, blue: 0.2)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            // ✅ Adaptive background (same as DailyHackView pages 2-3)
+            Color.appBackground.ignoresSafeArea()
+            
+            // ✅ Subtle depth gradient (only in dark mode)
+            if colorScheme == .dark {
+                RadialGradient(
+                    colors: [
+                        Color(white: 0.04),
+                        Color.black
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 500
+                )
+                .ignoresSafeArea()
+            }
             
             ScrollView {
                 VStack(spacing: 30) {
                     // Header
                     Text("Your Streak")
                         .font(.largeTitle.bold())
-                        .foregroundColor(.white)
+                        .foregroundColor(.appTextPrimary)
                         .padding(.top, 20)
                     
                     // Month/Year
                     Text(monthYearString(from: currentMonth))
                         .font(.title3)
-                        .foregroundColor(.white.opacity(0.8))
+                        .foregroundColor(.appTextSecondary)
                     
                     // Calendar
                     calendarView
@@ -38,9 +66,9 @@ struct InsightsView: View {
                     streakStatsView
                         .padding(.horizontal)
                     
-                    if viewModel.isLoading {
+                    if isLoading {
                         ProgressView()
-                            .tint(.white)
+                            .tint(.appAccent)
                             .padding()
                     }
                 }
@@ -49,15 +77,28 @@ struct InsightsView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        // ✅ Apply user's preferred color scheme
+        .preferredColorScheme(preferredColorScheme)
         .task {
-            await viewModel.loadStreakData()
+            // Only fetch completed dates for calendar
+            // Streak data comes from preloaded meter data!
+            await loadCompletedDates()
+            
+            // Fetch meter data if not already loaded
+            if meterDataManager.meterData == nil {
+                print("⚠️ Meter data not preloaded, fetching now...")
+                await meterDataManager.fetchMeterData()
+            } else {
+                print("✅ Using preloaded meter data for streaks!")
+            }
         }
         .refreshable {
-            await viewModel.loadStreakData()
+            await meterDataManager.fetchMeterData(force: true)
+            await loadCompletedDates()
         }
     }
     
-    // MARK: - Calendar View
+    // MARK: - Calendar View - ADAPTIVE
     
     private var calendarView: some View {
         VStack(spacing: 20) {
@@ -66,7 +107,7 @@ struct InsightsView: View {
                 ForEach(["S", "M", "T", "W", "T", "F", "S"], id: \.self) { day in
                     Text(day)
                         .font(.caption.bold())
-                        .foregroundColor(.white.opacity(0.6))
+                        .foregroundColor(.appTextSecondary)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -79,7 +120,11 @@ struct InsightsView: View {
             }
         }
         .padding()
-        .background(Color.white.opacity(0.05))
+        .background(Color.appCardBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(Color.appCardBorder, lineWidth: 1)
+        )
         .cornerRadius(20)
     }
     
@@ -87,31 +132,31 @@ struct InsightsView: View {
         Group {
             if let date = date {
                 let dayNumber = Calendar.current.component(.day, from: date)
-                let isCompleted = viewModel.completedDates.contains(where: { Calendar.current.isDate($0, inSameDayAs: date) })
+                let isCompleted = completedDates.contains(where: { Calendar.current.isDate($0, inSameDayAs: date) })
                 let isToday = Calendar.current.isDateInToday(date)
                 
                 VStack(spacing: 6) {
                     ZStack {
                         Circle()
-                            .stroke(isToday ? Color.yellow : Color.white.opacity(0.3), lineWidth: 2)
+                            .stroke(isToday ? Color.appAccent : Color.appCardBorder, lineWidth: 2)
                             .frame(width: 40, height: 40)
                         
                         if isCompleted {
                             Circle()
-                                .fill(Color.yellow.opacity(0.2))
+                                .fill(Color.appAccent.opacity(0.2))
                                 .frame(width: 40, height: 40)
                         }
                         
                         Text("\(dayNumber)")
                             .font(.system(size: 16, weight: isToday ? .bold : .regular))
-                            .foregroundColor(.white)
+                            .foregroundColor(.appTextPrimary)
                     }
                     
                     // Lightning icon for completed days
                     if isCompleted {
                         Image(systemName: "bolt.fill")
                             .font(.system(size: 16))
-                            .foregroundColor(.yellow)
+                            .foregroundColor(.appAccent)
                     } else {
                         Color.clear.frame(height: 16)
                     }
@@ -122,40 +167,103 @@ struct InsightsView: View {
         }
     }
     
-    // MARK: - Streak Stats
+    // MARK: - Streak Stats - ADAPTIVE
     
     private var streakStatsView: some View {
         HStack(spacing: 20) {
             // Current Streak
             VStack(spacing: 8) {
-                Text("\(viewModel.currentStreak)")
+                Text("\(meterDataManager.meterData?.streak ?? 0)")
                     .font(.system(size: 48, weight: .bold))
-                    .foregroundColor(.yellow)
+                    .foregroundColor(.appAccent)
                 
                 Text("Current Streak")
                     .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(.appTextSecondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 24)
-            .background(Color.white.opacity(0.05))
+            .background(Color.appCardBackground)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.appCardBorder, lineWidth: 1)
+            )
             .cornerRadius(16)
             
             // Longest Streak
             VStack(spacing: 8) {
-                Text("\(viewModel.longestStreak)")
+                Text("\(meterDataManager.meterData?.streak ?? 0)")
                     .font(.system(size: 48, weight: .bold))
                     .foregroundColor(.green)
                 
                 Text("Longest Streak")
                     .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(.appTextSecondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 24)
-            .background(Color.white.opacity(0.05))
+            .background(Color.appCardBackground)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.appCardBorder, lineWidth: 1)
+            )
             .cornerRadius(16)
         }
+    }
+    
+    // MARK: - Load Completed Dates (for calendar only)
+    
+    private func loadCompletedDates() async {
+        guard let userId = supabase.userId else {
+            print("❌ No user ID found")
+            return
+        }
+        
+        isLoading = true
+        
+        do {
+            // Fetch completed dates for this month
+            let calendar = Calendar.current
+            let now = Date()
+            let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now))!
+            let endOfMonth = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth)!
+            
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withFullDate]
+            
+            let startDateString = formatter.string(from: startOfMonth)
+            let endDateString = formatter.string(from: endOfMonth)
+            
+            struct CompletedTask: Decodable {
+                let date: String
+                let completed_at: String?
+            }
+            
+            let tasks: [CompletedTask] = try await supabase.client
+                .from("daily_tasks")
+                .select()
+                .eq("user_id", value: userId)
+                .gte("date", value: startDateString)
+                .lte("date", value: endDateString)
+                .not("completed_at", operator: .is, value: "null")
+                .execute()
+                .value
+            
+            // Convert to Date objects
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            
+            completedDates = tasks.compactMap { task in
+                dateFormatter.date(from: task.date)
+            }
+            
+            print("✅ Loaded \(completedDates.count) completed days this month")
+            
+        } catch {
+            print("❌ Load completed dates error: \(error)")
+        }
+        
+        isLoading = false
     }
     
     // MARK: - Helpers
@@ -194,4 +302,5 @@ struct InsightsView: View {
 
 #Preview {
     InsightsView()
+        .environmentObject(MeterDataManager.shared)
 }

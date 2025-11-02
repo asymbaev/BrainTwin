@@ -9,9 +9,12 @@ struct MainTabView: View {
     @StateObject private var hackViewModel = DailyHackViewModel()
     @AppStorage("lastCheckInDate") private var lastCheckInDate = ""
     
+    // Reference the shared singleton directly
+    private let meterDataManager = MeterDataManager.shared
+    
     // ⚠️ DEBUG MODE: Set to false for production (once per day behavior)
     // ⚠️ Set to true for testing (always shows check-in flow)
-    private let isTestMode = true  // ← CHANGE THIS TO false BEFORE RELEASE
+    private let isTestMode = false  // ← CHANGE THIS TO false BEFORE RELEASE
     
     init() {
         let formatter = DateFormatter()
@@ -20,14 +23,26 @@ struct MainTabView: View {
         
         let lastDate = UserDefaults.standard.string(forKey: "lastCheckInDate") ?? ""
         
+        // ✅ Check if this is first launch after onboarding
+        let justCompletedOnboarding = UserDefaults.standard.bool(forKey: "justCompletedOnboarding")
+        
+        // ✅ Clear the flag immediately
+        if justCompletedOnboarding {
+            UserDefaults.standard.set(false, forKey: "justCompletedOnboarding")
+        }
+        
         // In test mode: ALWAYS show check-in
-        // In production: Only show if new day
-        let shouldShow = isTestMode || (lastDate != today)
+        // In production: Only show if new day AND NOT first launch
+        let shouldShow = isTestMode || (!justCompletedOnboarding && lastDate != today)
         
         _showCheckIn = State(initialValue: shouldShow)
         
         if isTestMode {
             print("⚠️ TEST MODE: Check-in will show every time")
+        } else if justCompletedOnboarding {
+            print("✅ First launch after onboarding - skipping check-in")
+        } else {
+            print("📅 Returning user - check-in: \(shouldShow)")
         }
     }
     
@@ -63,6 +78,7 @@ struct MainTabView: View {
                 TabView(selection: $selectedTab) {
                     // Tab 1: Home (Dashboard + Brain Hack)
                     DashboardView()
+                        .environmentObject(meterDataManager)  // ← NEW: Inject preloaded data
                         .tabItem {
                             Image(systemName: "house.fill")
                             Text("Home")
@@ -82,6 +98,7 @@ struct MainTabView: View {
                     // Tab 3: Insights (for future)
                     NavigationStack {
                         InsightsView()
+                            .environmentObject(meterDataManager)  // ← NEW: Inject preloaded data
                     }
                     .tabItem {
                         Image(systemName: "bolt.fill")
@@ -104,6 +121,10 @@ struct MainTabView: View {
             }
         }
         .task {
+            // ✨ PRELOAD METER DATA IMMEDIATELY (while user is on check-in screen)
+            print("🚀 Preloading meter data on check-in screen...")
+            await meterDataManager.fetchMeterData()
+            
             // START HACK GENERATION IMMEDIATELY (in background)
             Task {
                 await hackViewModel.loadTodaysHack()
