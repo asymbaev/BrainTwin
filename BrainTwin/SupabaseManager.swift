@@ -12,6 +12,9 @@ class SupabaseManager: ObservableObject {
     
     @Published var isSignedIn = false
     @Published var userId: String?
+    @Published var isInitializing = true  // ✅ NEW: Loading state
+    
+    private var authStateTask: Task<Void, Never>?
     
     private init() {
         self.client = SupabaseClient(
@@ -19,10 +22,85 @@ class SupabaseManager: ObservableObject {
             supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3h3bGlvb3VueWR4amlrYmpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3NzU4NjYsImV4cCI6MjA3NTM1MTg2Nn0.u2U6xApU-ViMe1FO5TtRa31-y76nEgohsF1jJ63rk0Q"
         )
         
-        // Check if already signed in
-        self.isSignedIn = false
-        self.userId = nil
-
+        // ✅ Check session on launch
+        Task {
+            await checkExistingSession()
+            setupAuthStateListener()
+            self.isInitializing = false
+        }
+    }
+    
+    // MARK: - Session Restoration
+    
+    /// Checks if user has valid session AND exists in database
+    private func checkExistingSession() async {
+        do {
+            // Step 1: Check if auth session exists
+            let session = try await client.auth.session
+            let sessionUserId = session.user.id.uuidString
+            
+            print("🔍 Found auth session for user: \(sessionUserId)")
+            
+            // Step 2: Verify user EXISTS in database
+            do {
+                let _: BrainTwinUser = try await client
+                    .from("users")
+                    .select()
+                    .eq("id", value: sessionUserId)
+                    .single()
+                    .execute()
+                    .value
+                
+                // ✅ Session valid AND user exists in database
+                self.isSignedIn = true
+                self.userId = sessionUserId
+                print("✅ Session restored! User exists in database. User ID: \(sessionUserId)")
+                
+            } catch {
+                // ❌ Session exists but user NOT in database - SIGN OUT
+                print("⚠️ Session exists but user NOT in database. Signing out...")
+                try? await client.auth.signOut()
+                self.isSignedIn = false
+                self.userId = nil
+                print("👋 Signed out due to missing database user")
+            }
+            
+        } catch {
+            // No active session found
+            self.isSignedIn = false
+            self.userId = nil
+            print("ℹ️ No existing session - showing sign in")
+        }
+    }
+    
+    // MARK: - Auth State Listener
+    
+    /// Listens for auth state changes (sign out, token refresh, etc.)
+    private func setupAuthStateListener() {
+        authStateTask = Task {
+            for await state in await client.auth.authStateChanges {
+                await handleAuthStateChange(state.event, session: state.session)
+            }
+        }
+    }
+    
+    private func handleAuthStateChange(_ event: AuthChangeEvent, session: Session?) async {
+        switch event {
+        case .signedIn, .tokenRefreshed:
+            if let session = session {
+                self.isSignedIn = true
+                self.userId = session.user.id.uuidString
+                print("✅ Auth state: \(event) - User ID: \(session.user.id.uuidString)")
+            }
+            
+        case .signedOut:
+            self.isSignedIn = false
+            self.userId = nil
+            print("👋 Auth state: User signed out")
+            
+        default:
+            break
+        }
     }
     
     // MARK: - Anonymous sign in
@@ -33,7 +111,7 @@ class SupabaseManager: ObservableObject {
         self.userId = session.user.id.uuidString
         print("✅ Signed in! User ID: \(session.user.id.uuidString)")
         
-        // Create user in database if doesn't exist
+        // Create user in database
         try await createUserIfNeeded(userId: session.user.id.uuidString)
     }
 
@@ -93,8 +171,8 @@ class SupabaseManager: ObservableObject {
         let goal: String?
         let biggest_struggle: String?
         let preferred_time: String?
-        let name: String?  // NEW
-        let age: Int?      // NEW
+        let name: String?
+        let age: Int?
         
         enum CodingKeys: String, CodingKey {
             case id
@@ -107,122 +185,9 @@ class SupabaseManager: ObservableObject {
             case goal
             case biggest_struggle
             case preferred_time
-            case name    // NEW
-            case age     // NEW
+            case name
+            case age
         }
-    }
-
-    func signOut() async throws {
-        try await client.auth.signOut()
-        self.isSignedIn = false
-        self.userId = nil
-        print("👋 Signed out")
-    }
-
-    // MARK: - API Calls
-
-    func getMeterData(userId: String) async throws -> MeterResponse {
-        print("📊 Fetching meter data for user: \(userId)")
-        
-        let response: MeterResponse = try await client.functions.invoke(
-            "calculate-meter",
-            options: FunctionInvokeOptions(
-                body: ["userId": userId]
-            )
-        )
-        
-        print("✅ Meter data received: \(response.progress)% progress")
-        return response
-    }
-
-    // MARK: - Onboarding Methods
-
-    func hasCompletedOnboarding() async -> Bool {
-        guard let userId = userId else { return false }
-        
-        do {
-            let user: BrainTwinUser = try await client
-                .from("users")
-                .select()
-                .eq("id", value: userId)
-                .single()
-                .execute()
-                .value
-            
-            return user.onboarding_completed ?? false
-        } catch {
-            print("❌ Error checking onboarding status: \(error)")
-            return false
-        }
-    }
-
-    // UPDATED: Now includes name and age
-    func saveOnboardingData(name: String, age: Int, goal: String, struggle: String, preferredTime: String) async throws {
-        guard let userId = userId else {
-            throw NSError(
-                domain: "SupabaseManager",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "No user ID found"]
-            )
-        }
-        
-        struct OnboardingUpdate: Encodable {
-            let name: String
-            let age: Int
-            let goal: String
-            let biggest_struggle: String
-            let preferred_time: String
-            let onboarding_completed: Bool
-        }
-        
-        let update = OnboardingUpdate(
-            name: name,
-            age: age,
-            goal: goal,
-            biggest_struggle: struggle,
-            preferred_time: preferredTime,
-            onboarding_completed: true
-        )
-        
-        try await client
-            .from("users")
-            .update(update)
-            .eq("id", value: userId)
-            .execute()
-        
-        print("✅ Onboarding data saved: name=\(name), age=\(age), goal=\(goal), struggle=\(struggle), time=\(preferredTime)")
-    }
-
-    // MARK: - Sign in with Apple
-
-    func signInWithApple(
-        credential: ASAuthorizationAppleIDCredential,
-        nonce: String? = nil
-    ) async throws {
-        guard
-            let identityToken = credential.identityToken,
-            let tokenString = String(data: identityToken, encoding: .utf8)
-        else {
-            throw NSError(
-                domain: "SupabaseManager",
-                code: -2,
-                userInfo: [NSLocalizedDescriptionKey: "Unable to decode Apple identity token"]
-            )
-        }
-
-        let session = try await client.auth.signInWithIdToken(
-            credentials: OpenIDConnectCredentials(
-                provider: .apple,
-                idToken: tokenString,
-                nonce: nonce
-            )
-        )
-
-        self.isSignedIn = true
-        self.userId = session.user.id.uuidString
-        print("✅ Signed in with Apple. User ID: \(session.user.id.uuidString)")
-
-        try await createUserIfNeeded(userId: session.user.id.uuidString)
     }
 
     // MARK: - Email sign in / sign up
@@ -267,5 +232,129 @@ class SupabaseManager: ObservableObject {
             
             try await createUserIfNeeded(userId: user.id.uuidString)
         }
+    }
+
+    // MARK: - Onboarding Methods
+
+    func hasCompletedOnboarding() async -> Bool {
+        guard let userId = userId else {
+            print("⚠️ No userId - returning false for onboarding")
+            return false
+        }
+        
+        do {
+            let user: BrainTwinUser = try await client
+                .from("users")
+                .select()
+                .eq("id", value: userId)
+                .single()
+                .execute()
+                .value
+            
+            let completed = user.onboarding_completed ?? false
+            print("🔍 Onboarding check for \(userId): \(completed)")
+            return completed
+            
+        } catch {
+            print("❌ Error checking onboarding: \(error)")
+            return false
+        }
+    }
+
+    func saveOnboardingData(name: String, age: Int, goal: String, struggle: String, preferredTime: String) async throws {
+        guard let userId = userId else {
+            throw NSError(
+                domain: "SupabaseManager",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "No user ID found"]
+            )
+        }
+        
+        struct OnboardingUpdate: Encodable {
+            let name: String
+            let age: Int
+            let goal: String
+            let biggest_struggle: String
+            let preferred_time: String
+            let onboarding_completed: Bool
+        }
+        
+        let update = OnboardingUpdate(
+            name: name,
+            age: age,
+            goal: goal,
+            biggest_struggle: struggle,
+            preferred_time: preferredTime,
+            onboarding_completed: true
+        )
+        
+        try await client
+            .from("users")
+            .update(update)
+            .eq("id", value: userId)
+            .execute()
+        
+        print("✅ Onboarding COMPLETED and saved for user \(userId)")
+    }
+
+    // MARK: - Sign in with Apple
+
+    func signInWithApple(
+        credential: ASAuthorizationAppleIDCredential,
+        nonce: String? = nil
+    ) async throws {
+        guard
+            let identityToken = credential.identityToken,
+            let tokenString = String(data: identityToken, encoding: .utf8)
+        else {
+            throw NSError(
+                domain: "SupabaseManager",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Unable to decode Apple identity token"]
+            )
+        }
+
+        let session = try await client.auth.signInWithIdToken(
+            credentials: OpenIDConnectCredentials(
+                provider: .apple,
+                idToken: tokenString,
+                nonce: nonce
+            )
+        )
+
+        self.isSignedIn = true
+        self.userId = session.user.id.uuidString
+        print("✅ Signed in with Apple. User ID: \(session.user.id.uuidString)")
+
+        try await createUserIfNeeded(userId: session.user.id.uuidString)
+    }
+
+    // MARK: - Sign Out
+
+    func signOut() async throws {
+        try await client.auth.signOut()
+        self.isSignedIn = false
+        self.userId = nil
+        
+        // ✅ Clear local storage
+        UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
+        
+        print("👋 Signed out successfully")
+    }
+
+    // MARK: - API Calls
+
+    func getMeterData(userId: String) async throws -> MeterResponse {
+        print("📊 Fetching meter data for user: \(userId)")
+        
+        let response: MeterResponse = try await client.functions.invoke(
+            "calculate-meter",
+            options: FunctionInvokeOptions(
+                body: ["userId": userId]
+            )
+        )
+        
+        print("✅ Meter data received: \(response.progress)% progress")
+        return response
     }
 }

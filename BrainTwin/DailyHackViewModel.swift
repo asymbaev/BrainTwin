@@ -108,7 +108,7 @@ class DailyHackViewModel: ObservableObject {
             
             hasMarkedComplete = true
             
-            // Step 2: CRITICAL - Call calculate-meter to update rewire progress
+            // Step 2: Call calculate-meter to update rewire progress
             struct MeterRequest: Encodable {
                 let userId: String
             }
@@ -126,13 +126,16 @@ class DailyHackViewModel: ObservableObject {
             print("   Skill: \(meterResponse.skillLevel)")
             print("   Streak: \(meterResponse.streak) days")
             
-            if let levelUpMsg = meterResponse.levelUpMessage {
-                print("🎉 \(levelUpMsg)")
-            }
+            // Step 3: CRITICAL FIX - Force refresh MeterDataManager
+            await MeterDataManager.shared.fetchMeterData(force: true)
+            
+            // Step 4: Notify Dashboard to refresh
+            NotificationCenter.default.post(name: Notification.Name("RefreshDashboard"), object: nil)
+            
+            print("🔄 Dashboard refresh triggered!")
             
         } catch {
-            print("❌ Complete error: \(error)")
-            errorMessage = "Failed to mark complete: \(error.localizedDescription)"
+            print("❌ Mark complete error: \(error)")
         }
     }
     
