@@ -1,6 +1,8 @@
 import Foundation
 import Supabase
 import Combine
+import AuthenticationServices
+import Auth
 
 @MainActor
 class SupabaseManager: ObservableObject {
@@ -18,14 +20,13 @@ class SupabaseManager: ObservableObject {
         )
         
         // Check if already signed in
-        Task {
-            if let session = try? await client.auth.session {
-                self.isSignedIn = true
-                self.userId = session.user.id.uuidString
-            }
-        }
+        self.isSignedIn = false
+        self.userId = nil
+
     }
     
+    // MARK: - Anonymous sign in
+
     func signInAnonymously() async throws {
         let session = try await client.auth.signInAnonymously()
         self.isSignedIn = true
@@ -59,7 +60,7 @@ class SupabaseManager: ObservableObject {
                 let rewire_progress: Double
                 let current_streak: Int
                 let skill_level: String
-                let onboarding_completed: Bool  // ← NEW
+                let onboarding_completed: Bool
             }
             
             let newUser = NewUser(
@@ -69,7 +70,7 @@ class SupabaseManager: ObservableObject {
                 rewire_progress: 0,
                 current_streak: 0,
                 skill_level: "foggy",
-                onboarding_completed: false  // ← NEW: First-time users need onboarding
+                onboarding_completed: false
             )
             
             try await client
@@ -88,10 +89,12 @@ class SupabaseManager: ObservableObject {
         let rewire_progress: Double
         let current_streak: Int
         let skill_level: String
-        let onboarding_completed: Bool?  // ← NEW: Optional for backwards compatibility
-        let goal: String?  // ← NEW: User's main goal from onboarding
-        let biggest_struggle: String?  // ← NEW: User's biggest struggle
-        let preferred_time: String?  // ← NEW: Preferred notification time
+        let onboarding_completed: Bool?
+        let goal: String?
+        let biggest_struggle: String?
+        let preferred_time: String?
+        let name: String?  // NEW
+        let age: Int?      // NEW
         
         enum CodingKeys: String, CodingKey {
             case id
@@ -104,18 +107,20 @@ class SupabaseManager: ObservableObject {
             case goal
             case biggest_struggle
             case preferred_time
+            case name    // NEW
+            case age     // NEW
         }
     }
-    
+
     func signOut() async throws {
         try await client.auth.signOut()
         self.isSignedIn = false
         self.userId = nil
         print("👋 Signed out")
     }
-    
+
     // MARK: - API Calls
-        
+
     func getMeterData(userId: String) async throws -> MeterResponse {
         print("📊 Fetching meter data for user: \(userId)")
         
@@ -129,10 +134,9 @@ class SupabaseManager: ObservableObject {
         print("✅ Meter data received: \(response.progress)% progress")
         return response
     }
-    
-    // MARK: - Onboarding Methods (NEW)
-    
-    /// Check if user has completed onboarding
+
+    // MARK: - Onboarding Methods
+
     func hasCompletedOnboarding() async -> Bool {
         guard let userId = userId else { return false }
         
@@ -151,14 +155,20 @@ class SupabaseManager: ObservableObject {
             return false
         }
     }
-    
-    /// Save onboarding data
-    func saveOnboardingData(goal: String, struggle: String, preferredTime: String) async throws {
+
+    // UPDATED: Now includes name and age
+    func saveOnboardingData(name: String, age: Int, goal: String, struggle: String, preferredTime: String) async throws {
         guard let userId = userId else {
-            throw NSError(domain: "SupabaseManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "No user ID found"])
+            throw NSError(
+                domain: "SupabaseManager",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "No user ID found"]
+            )
         }
         
         struct OnboardingUpdate: Encodable {
+            let name: String
+            let age: Int
             let goal: String
             let biggest_struggle: String
             let preferred_time: String
@@ -166,6 +176,8 @@ class SupabaseManager: ObservableObject {
         }
         
         let update = OnboardingUpdate(
+            name: name,
+            age: age,
             goal: goal,
             biggest_struggle: struggle,
             preferred_time: preferredTime,
@@ -178,6 +190,82 @@ class SupabaseManager: ObservableObject {
             .eq("id", value: userId)
             .execute()
         
-        print("✅ Onboarding data saved: goal=\(goal), struggle=\(struggle), time=\(preferredTime)")
+        print("✅ Onboarding data saved: name=\(name), age=\(age), goal=\(goal), struggle=\(struggle), time=\(preferredTime)")
+    }
+
+    // MARK: - Sign in with Apple
+
+    func signInWithApple(
+        credential: ASAuthorizationAppleIDCredential,
+        nonce: String? = nil
+    ) async throws {
+        guard
+            let identityToken = credential.identityToken,
+            let tokenString = String(data: identityToken, encoding: .utf8)
+        else {
+            throw NSError(
+                domain: "SupabaseManager",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Unable to decode Apple identity token"]
+            )
+        }
+
+        let session = try await client.auth.signInWithIdToken(
+            credentials: OpenIDConnectCredentials(
+                provider: .apple,
+                idToken: tokenString,
+                nonce: nonce
+            )
+        )
+
+        self.isSignedIn = true
+        self.userId = session.user.id.uuidString
+        print("✅ Signed in with Apple. User ID: \(session.user.id.uuidString)")
+
+        try await createUserIfNeeded(userId: session.user.id.uuidString)
+    }
+
+    // MARK: - Email sign in / sign up
+
+    func signInOrSignUpWithEmail(email: String, password: String) async throws {
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard !trimmedEmail.isEmpty, !trimmedPassword.isEmpty else {
+            throw NSError(
+                domain: "SupabaseManager",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Email and password are required"]
+            )
+        }
+        
+        do {
+            print("🔐 Trying email sign in for \(trimmedEmail)")
+            let session = try await client.auth.signIn(
+                email: trimmedEmail,
+                password: trimmedPassword
+            )
+            
+            self.isSignedIn = true
+            self.userId = session.user.id.uuidString
+            print("✅ Email sign in success. User ID: \(session.user.id.uuidString)")
+            
+            try await createUserIfNeeded(userId: session.user.id.uuidString)
+        } catch {
+            print("⚠️ Email sign in failed, trying sign up: \(error)")
+            
+            let signUpResult = try await client.auth.signUp(
+                email: trimmedEmail,
+                password: trimmedPassword
+            )
+            
+            let user = signUpResult.user
+            
+            self.isSignedIn = true
+            self.userId = user.id.uuidString
+            print("🆕 Email sign up success. User ID: \(user.id.uuidString)")
+            
+            try await createUserIfNeeded(userId: user.id.uuidString)
+        }
     }
 }

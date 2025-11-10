@@ -1,4 +1,5 @@
 import SwiftUI
+import SuperwallKit
 
 struct OnboardingView: View {
     @StateObject private var viewModel = OnboardingViewModel()
@@ -6,26 +7,22 @@ struct OnboardingView: View {
     @State private var showProfileSetup = false
     @State private var setupComplete = false
     
-    // Appearance override (same as dashboard)
     @AppStorage("appearanceMode") private var appearanceMode = "system"
     
     @Environment(\.colorScheme) var colorScheme
     
-    // Computed color scheme based on user preference
     private var preferredColorScheme: ColorScheme? {
         switch appearanceMode {
         case "light": return .light
         case "dark": return .dark
-        default: return nil // System
+        default: return nil
         }
     }
     
     var body: some View {
         ZStack {
-            // Adaptive background (same as dashboard)
             Color.appBackground.ignoresSafeArea()
             
-            // Subtle depth gradient (only in dark mode)
             if colorScheme == .dark {
                 RadialGradient(
                     colors: [
@@ -39,14 +36,13 @@ struct OnboardingView: View {
                 .ignoresSafeArea()
             }
             
-            // Adaptive starfield overlay
             AdaptiveStarfieldView()
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // Progress indicator
+                // Progress indicator - NOW 5 STEPS
                 HStack(spacing: 8) {
-                    ForEach(0..<3, id: \.self) { index in
+                    ForEach(0..<5, id: \.self) { index in
                         Capsule()
                             .fill(index <= viewModel.currentStep ? Color.appAccent : Color.appTextTertiary)
                             .frame(height: 4)
@@ -56,9 +52,11 @@ struct OnboardingView: View {
                 
                 // Content
                 TabView(selection: $viewModel.currentStep) {
-                    screen1_GoalSelection.tag(0)
-                    screen2_StruggleSelection.tag(1)
-                    screen3_TimeSelection.tag(2)
+                    screen0_NameCollection.tag(0)      // NEW
+                    screen1_AgeCollection.tag(1)       // NEW
+                    screen2_GoalSelection.tag(2)       // Was 0
+                    screen3_StruggleSelection.tag(3)   // Was 1
+                    screen4_TimeSelection.tag(4)       // Was 2
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             }
@@ -68,26 +66,258 @@ struct OnboardingView: View {
                         if done {
                             print("🎉 Animation complete! Setting onboarding complete...")
                             
-                            // ✅ Mark onboarding as complete
                             isOnboardingComplete = true
-                            
-                            // ✅ Set flag so MainTabView knows to skip check-in on first launch
                             UserDefaults.standard.set(true, forKey: "justCompletedOnboarding")
                             
-                            // Dismiss the animation
                             showProfileSetup = false
+                            
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                showPaywall()
+                            }
                         }
                     }
                     .interactiveDismissDisabled(true)
             }
         }
-        .preferredColorScheme(preferredColorScheme) // Apply user preference
+        .preferredColorScheme(preferredColorScheme)
     }
     
-    // MARK: - Screen 1: Goal Selection
+    // MARK: - Paywall (UPDATED - Age-based routing)
+    private func showPaywall() {
+        // Determine campaign based on user's age
+        let campaign = determineCampaignByAge(age: viewModel.ageInt ?? 25)
+        
+        print("🎯 Triggering Superwall campaign: \(campaign) for age: \(viewModel.ageInt ?? 25)")
+        
+        // Register the age-specific campaign
+        Superwall.shared.register(placement: campaign)
+        
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            await checkIfUserSubscribed()
+        }
+    }
     
-    private var screen1_GoalSelection: some View {
+    /// Determines which Superwall campaign to trigger based on user's age
+    private func determineCampaignByAge(age: Int) -> String {
+        switch age {
+        case 0..<18:
+            return "Under 18"
+        case 18...22:
+            return "18-22"
+        case 23...28:
+            return "23-28"
+        case 29...40:
+            return "29-40"
+        default: // 41+
+            return "Over 40"
+        }
+    }
+
+    private func checkIfUserSubscribed() async {
+        await SubscriptionManager.shared.refreshSubscription()
+        
+        if SubscriptionManager.shared.isSubscribed {
+            await MainActor.run {
+                completeOnboarding()
+            }
+        } else {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            
+            await MainActor.run {
+                if !SubscriptionManager.shared.isSubscribed {
+                    print("⚠️ User didn't subscribe, showing paywall again...")
+                    showPaywall()
+                } else {
+                    completeOnboarding()
+                }
+            }
+        }
+    }
+
+    private func completeOnboarding() {
+        isOnboardingComplete = true
+        UserDefaults.standard.set(true, forKey: "justCompletedOnboarding")
+        print("✅ Onboarding complete - user is subscribed!")
+    }
+    
+    // MARK: - Screen 0: Name Collection (NEW)
+    
+    private var screen0_NameCollection: some View {
         VStack(spacing: 24) {
+            Spacer()
+            
+            // Header
+            VStack(spacing: 16) {
+                Text("What's your name?")
+                    .font(.title.bold())
+                    .foregroundColor(.appTextPrimary)
+                    .multilineTextAlignment(.center)
+                
+                Text("Let's personalize your experience")
+                    .font(.subheadline)
+                    .foregroundColor(.appTextSecondary)
+            }
+            
+            Spacer()
+            
+            // Name Input
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("Enter your first name", text: $viewModel.userName)
+                    .textFieldStyle(.plain)
+                    .font(.title3)
+                    .foregroundColor(.appTextPrimary)
+                    .accentColor(.appAccent)
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.appCardBackground)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(
+                                viewModel.userName.isEmpty ? Color.appCardBorder : Color.appAccent,
+                                lineWidth: viewModel.userName.isEmpty ? 1 : 2
+                            )
+                    )
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.words)
+                
+                if !viewModel.userName.isEmpty && !viewModel.isNameValid {
+                    Text("Please enter at least 2 characters")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.leading, 4)
+                }
+            }
+            .padding(.horizontal)
+            
+            Spacer()
+            
+            // Continue Button
+            Button("Continue") {
+                withAnimation {
+                    viewModel.currentStep = 1
+                }
+            }
+            .buttonStyle(OnboardingButtonStyle())
+            .disabled(!viewModel.isNameValid)
+            .opacity(viewModel.isNameValid ? 1 : 0.5)
+            .padding()
+        }
+    }
+    
+    // MARK: - Screen 1: Age Collection (NEW)
+    
+    private var screen1_AgeCollection: some View {
+        VStack(spacing: 24) {
+            // Back button
+            HStack {
+                Button {
+                    withAnimation {
+                        viewModel.currentStep = 0
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
+                    }
+                    .foregroundColor(.appTextPrimary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            
+            Spacer()
+            
+            // Header
+            VStack(spacing: 16) {
+                Text("How old are you?")
+                    .font(.title.bold())
+                    .foregroundColor(.appTextPrimary)
+                    .multilineTextAlignment(.center)
+                
+                Text("This helps us personalize your journey")
+                    .font(.subheadline)
+                    .foregroundColor(.appTextSecondary)
+            }
+            
+            Spacer()
+            
+            // Age Input
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("Enter your age", text: $viewModel.userAge)
+                    .textFieldStyle(.plain)
+                    .font(.title3)
+                    .foregroundColor(.appTextPrimary)
+                    .accentColor(.appAccent)
+                    .keyboardType(.numberPad)
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.appCardBackground)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(
+                                viewModel.userAge.isEmpty ? Color.appCardBorder : Color.appAccent,
+                                lineWidth: viewModel.userAge.isEmpty ? 1 : 2
+                            )
+                    )
+                
+                if !viewModel.userAge.isEmpty && !viewModel.isAgeValid {
+                    Text("Please enter a valid age (13-120)")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.leading, 4)
+                }
+                
+                Text("We use this to personalize content and track demographics")
+                    .font(.caption)
+                    .foregroundColor(.appTextTertiary)
+                    .padding(.leading, 4)
+                    .padding(.top, 4)
+            }
+            .padding(.horizontal)
+            
+            Spacer()
+            
+            // Continue Button
+            Button("Continue") {
+                withAnimation {
+                    viewModel.currentStep = 2
+                }
+            }
+            .buttonStyle(OnboardingButtonStyle())
+            .disabled(!viewModel.isAgeValid)
+            .opacity(viewModel.isAgeValid ? 1 : 0.5)
+            .padding()
+        }
+    }
+    
+    // MARK: - Screen 2: Goal Selection (Was Screen 0)
+    
+    private var screen2_GoalSelection: some View {
+        VStack(spacing: 24) {
+            // Back button
+            HStack {
+                Button {
+                    withAnimation {
+                        viewModel.currentStep = 1
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
+                    }
+                    .foregroundColor(.appTextPrimary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            
             Spacer()
             
             // Header
@@ -151,7 +381,6 @@ struct OnboardingView: View {
                         )
                     }
                     
-                    // Custom input field
                     if viewModel.selectedGoal == "custom" {
                         TextField("e.g., Build discipline to finish my startup tasks", text: $viewModel.customGoalText, axis: .vertical)
                             .textFieldStyle(.plain)
@@ -182,7 +411,7 @@ struct OnboardingView: View {
             // Continue Button
             Button("Continue") {
                 withAnimation {
-                    viewModel.currentStep = 1
+                    viewModel.currentStep = 3
                 }
             }
             .buttonStyle(OnboardingButtonStyle())
@@ -192,15 +421,15 @@ struct OnboardingView: View {
         }
     }
     
-    // MARK: - Screen 2: Struggle Selection
+    // MARK: - Screen 3: Struggle Selection (Was Screen 1)
     
-    private var screen2_StruggleSelection: some View {
+    private var screen3_StruggleSelection: some View {
         VStack(spacing: 24) {
             // Back button
             HStack {
                 Button {
                     withAnimation {
-                        viewModel.currentStep = 0
+                        viewModel.currentStep = 2
                     }
                 } label: {
                     HStack(spacing: 4) {
@@ -283,7 +512,6 @@ struct OnboardingView: View {
                         )
                     }
                     
-                    // Custom struggle field
                     if viewModel.selectedStruggle == "other" {
                         TextField("Describe your biggest challenge...", text: $viewModel.customStruggleText, axis: .vertical)
                             .textFieldStyle(.plain)
@@ -314,7 +542,7 @@ struct OnboardingView: View {
             // Continue Button
             Button("Continue") {
                 withAnimation {
-                    viewModel.currentStep = 2
+                    viewModel.currentStep = 4
                 }
             }
             .buttonStyle(OnboardingButtonStyle())
@@ -324,15 +552,15 @@ struct OnboardingView: View {
         }
     }
     
-    // MARK: - Screen 3: Time Selection + Notifications
+    // MARK: - Screen 4: Time Selection (Was Screen 2)
     
-    private var screen3_TimeSelection: some View {
+    private var screen4_TimeSelection: some View {
         VStack(spacing: 0) {
             // Back button
             HStack {
                 Button {
                     withAnimation {
-                        viewModel.currentStep = 1
+                        viewModel.currentStep = 3
                     }
                 } label: {
                     HStack(spacing: 4) {
@@ -424,7 +652,7 @@ struct OnboardingView: View {
                 }
             }
             
-            // Complete Button (Fixed at bottom)
+            // Complete Button
             Button {
                 Task {
                     await viewModel.completeOnboarding()
@@ -448,14 +676,12 @@ struct OnboardingView: View {
     }
 }
 
-// MARK: - Goal Option Button Component
+// MARK: - Button Components (unchanged)
 
 struct GoalOptionButton: View {
     let title: String
     let isSelected: Bool
     let action: () -> Void
-    
-    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         Button(action: action) {
@@ -484,14 +710,10 @@ struct GoalOptionButton: View {
     }
 }
 
-// MARK: - Struggle Option Button Component
-
 struct StruggleOptionButton: View {
     let title: String
     let isSelected: Bool
     let action: () -> Void
-    
-    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         Button(action: action) {
@@ -521,16 +743,12 @@ struct StruggleOptionButton: View {
     }
 }
 
-// MARK: - Time Option Button Component
-
 struct TimeOptionButton: View {
     let title: String
     let subtitle: String
     let timeValue: String
     let isSelected: Bool
     let action: () -> Void
-    
-    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         Button(action: action) {
@@ -565,8 +783,6 @@ struct TimeOptionButton: View {
     }
 }
 
-// MARK: - Onboarding Button Style
-
 struct OnboardingButtonStyle: ButtonStyle {
     @Environment(\.colorScheme) var colorScheme
     
@@ -584,8 +800,6 @@ struct OnboardingButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - TextField Placeholder Extension
-
 extension View {
     func placeholder<Content: View>(
         when shouldShow: Bool,
@@ -598,8 +812,6 @@ extension View {
         }
     }
 }
-
-// MARK: - Adaptive Starfield View
 
 struct AdaptiveStarfieldView: View {
     @State private var stars: [Star] = []
@@ -623,19 +835,17 @@ struct AdaptiveStarfieldView: View {
         }
     }
     
-    // Adaptive star color and opacity
     private var starColor: Color {
         colorScheme == .dark ? .white : Color(white: 0.3)
     }
     
     private var opacityMultiplier: Double {
-        colorScheme == .dark ? 1.0 : 0.3 // More subtle in light mode
+        colorScheme == .dark ? 1.0 : 0.3
     }
     
     private func generateStars(in size: CGSize) {
         var generatedStars: [Star] = []
         
-        // Create 150 stars
         for i in 0..<150 {
             let star = Star(
                 id: i,
@@ -651,7 +861,6 @@ struct AdaptiveStarfieldView: View {
         
         stars = generatedStars
         
-        // Animate twinkling
         for (index, star) in stars.enumerated() {
             animateStar(at: index, delay: star.animationDelay)
         }

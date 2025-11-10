@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BF0A8BEF2EB8117D008E02A2 /* SuperwallKit in Frameworks */ = {isa = PBXBuildFile; productRef = BF0A8BEE2EB8117D008E02A2 /* SuperwallKit */; };
+		BF0A8C022EBEB6AF008E02A2 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BF0A8C012EBEB6AF008E02A2 /* StoreKit.framework */; };
 		BF2CCDAF2E9766AC005C222B /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = BF2CCDAE2E9766AC005C222B /* Auth */; };
 		BF2CCDB12E9766AC005C222B /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = BF2CCDB02E9766AC005C222B /* Functions */; };
 		BF2CCDB32E9766AC005C222B /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = BF2CCDB22E9766AC005C222B /* PostgREST */; };
@@ -14,6 +16,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		BF0A8C012EBEB6AF008E02A2 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		BF2CCD9F2E9765A7005C222B /* BrainTwin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BrainTwin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -33,6 +36,8 @@
 				BF2CCDB52E9766AC005C222B /* Supabase in Frameworks */,
 				BF2CCDB32E9766AC005C222B /* PostgREST in Frameworks */,
 				BF2CCDB12E9766AC005C222B /* Functions in Frameworks */,
+				BF0A8C022EBEB6AF008E02A2 /* StoreKit.framework in Frameworks */,
+				BF0A8BEF2EB8117D008E02A2 /* SuperwallKit in Frameworks */,
 				BF2CCDAF2E9766AC005C222B /* Auth in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -40,10 +45,19 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		BF0A8C002EBEB6AF008E02A2 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				BF0A8C012EBEB6AF008E02A2 /* StoreKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		BF2CCD962E9765A7005C222B = {
 			isa = PBXGroup;
 			children = (
 				BF2CCDA12E9765A7005C222B /* BrainTwin */,
+				BF0A8C002EBEB6AF008E02A2 /* Frameworks */,
 				BF2CCDA02E9765A7005C222B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -80,6 +94,7 @@
 				BF2CCDB02E9766AC005C222B /* Functions */,
 				BF2CCDB22E9766AC005C222B /* PostgREST */,
 				BF2CCDB42E9766AC005C222B /* Supabase */,
+				BF0A8BEE2EB8117D008E02A2 /* SuperwallKit */,
 			);
 			productName = BrainTwin;
 			productReference = BF2CCD9F2E9765A7005C222B /* BrainTwin.app */;
@@ -111,6 +126,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				BF2CCDAD2E9766AC005C222B /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				BF0A8BED2EB8117D008E02A2 /* XCRemoteSwiftPackageReference "Superwall-IOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BF2CCDA02E9765A7005C222B /* Products */;
@@ -269,6 +285,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = BrainTwin/BrainTwin.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = PHRK8JKQ56;
@@ -279,6 +296,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -287,12 +305,16 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.asym.BrainTwin;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -301,6 +323,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = BrainTwin/BrainTwin.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = PHRK8JKQ56;
@@ -311,6 +334,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -319,12 +343,16 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.asym.BrainTwin;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -352,6 +380,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		BF0A8BED2EB8117D008E02A2 /* XCRemoteSwiftPackageReference "Superwall-IOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/superwall/Superwall-IOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.9.3;
+			};
+		};
 		BF2CCDAD2E9766AC005C222B /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/supabase/supabase-swift";
@@ -363,6 +399,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		BF0A8BEE2EB8117D008E02A2 /* SuperwallKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BF0A8BED2EB8117D008E02A2 /* XCRemoteSwiftPackageReference "Superwall-IOS" */;
+			productName = SuperwallKit;
+		};
 		BF2CCDAE2E9766AC005C222B /* Auth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = BF2CCDAD2E9766AC005C222B /* XCRemoteSwiftPackageReference "supabase-swift" */;
