@@ -577,7 +577,7 @@ struct DailyHackView: View {
                             .cornerRadius(20)
                             .padding(.top, 20)
                             
-                            Text("In \(hack.hackName), we target specific brain mechanisms.")
+                            Text("The Brain Hack")
                                 .font(.system(size: 20, weight: .semibold))
                                 .foregroundColor(.appTextPrimary)
                                 .multilineTextAlignment(.center)
