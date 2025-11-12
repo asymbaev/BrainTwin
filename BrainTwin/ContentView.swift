@@ -5,7 +5,7 @@ struct ContentView: View {
     @StateObject private var supabase = SupabaseManager.shared
 
     @AppStorage("hasSeenIntro_v2") private var hasSeenIntro = false
-    @State private var hasCompletedOnboarding = false  // ✅ CHANGED from @AppStorage to @State
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false  // ✅ FIXED: Now uses @AppStorage
     
     @State private var isCheckingOnboarding = false
     @State private var showAnimation = true
@@ -44,16 +44,7 @@ struct ContentView: View {
 
             } else {
                 // 📋 ONBOARDING
-                OnboardingView(isOnboardingComplete: Binding(
-                    get: { hasCompletedOnboarding },
-                    set: { newValue in
-                        hasCompletedOnboarding = newValue
-                        // ✅ Save to @AppStorage when completed
-                        if newValue {
-                            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
-                        }
-                    }
-                ))
+                OnboardingView(isOnboardingComplete: $hasCompletedOnboarding)
             }
         }
         .task {
@@ -71,38 +62,25 @@ struct ContentView: View {
             }
         }
     }
-
-    @ViewBuilder
+    
     private var loadingView: some View {
-        VStack(spacing: 12) {
+        ZStack {
+            Color.black.ignoresSafeArea()
             ProgressView()
-            Text("Loading...")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .tint(.white)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.appBackground)
     }
 
-    /// Check database for onboarding status and sync with local state
     private func handleSignedIn() async {
         print("🔄 Checking onboarding status from database...")
+        isCheckingOnboarding = true
         
-        await MainActor.run { isCheckingOnboarding = true }
+        let completedInDB = await supabase.hasCompletedOnboarding()
         
-        // ✅ Fetch from DATABASE (source of truth)
-        let completedInDatabase = await supabase.hasCompletedOnboarding()
+        // ✅ Sync local storage with database
+        hasCompletedOnboarding = completedInDB
         
-        await MainActor.run {
-            hasCompletedOnboarding = completedInDatabase
-            isCheckingOnboarding = false
-            
-            // ✅ Sync local storage with database
-            UserDefaults.standard.set(completedInDatabase, forKey: "hasCompletedOnboarding")
-            
-            print("✅ Onboarding status: \(completedInDatabase)")
-        }
+        print("✅ Onboarding status: \(completedInDB)")
+        isCheckingOnboarding = false
     }
 }
-
-#Preview { ContentView() }

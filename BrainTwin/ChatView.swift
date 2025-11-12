@@ -81,11 +81,11 @@ struct ChatView: View {
                                 .padding(.vertical, 8)
                             }
 
-                            Color.clear.frame(height: 20)
+                            // ✅ Spacer to push content up when keyboard appears
+                            Color.clear.frame(height: 16)
                         }
                         .padding(.horizontal)
                         .padding(.top, 4)
-                        .padding(.bottom, 90)
                     }
                     .onChange(of: viewModel.messages.count) { _, _ in
                         if let last = viewModel.messages.last {
@@ -94,13 +94,13 @@ struct ChatView: View {
                     }
                 }
 
-                // Input Area
+                // ✅ Input Area - FIXED FOR KEYBOARD
                 inputBar
+                    .background(Color.appBackground)
             }
         }
-        .ignoresSafeArea(.keyboard, edges: .bottom)
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .navigationTitle("")
+        // ✅ REMOVED .ignoresSafeArea(.keyboard) - This was the main bug!
+        .navigationTitle("Chat")
         .navigationBarTitleDisplayMode(.inline)
         .background(Color.clear)
         // ✅ Apply user's preferred color scheme
@@ -113,13 +113,14 @@ struct ChatView: View {
         }
     }
 
-    // MARK: - Input Bar - ADAPTIVE
+    // MARK: - Input Bar - FIXED FOR REAL DEVICES
     private var inputBar: some View {
         VStack(spacing: 0) {
             Divider()
                 .background(Color.appCardBorder)
 
             HStack(spacing: 12) {
+                // Text Input Field
                 ZStack(alignment: .leading) {
                     if messageText.isEmpty {
                         HStack(spacing: 8) {
@@ -150,6 +151,7 @@ struct ChatView: View {
                 )
                 .cornerRadius(16)
 
+                // Send Button
                 Button {
                     sendMessage()
                 } label: {
@@ -169,8 +171,8 @@ struct ChatView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(Color.appBackground)
         }
+        .background(Color.appBackground)
     }
 
     // MARK: - Actions

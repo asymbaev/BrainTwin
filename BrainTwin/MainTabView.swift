@@ -26,9 +26,11 @@ struct MainTabView: View {
         // ✅ Check if this is first launch after onboarding
         let justCompletedOnboarding = UserDefaults.standard.bool(forKey: "justCompletedOnboarding")
         
-        // ✅ Clear the flag immediately
+        // ✅ CRITICAL FIX: If skipping check-in, save today's date!
         if justCompletedOnboarding {
             UserDefaults.standard.set(false, forKey: "justCompletedOnboarding")
+            UserDefaults.standard.set(today, forKey: "lastCheckInDate")  // ← NEW: Save date
+            print("✅ First launch after onboarding - skipping check-in and saving date: \(today)")
         }
         
         // In test mode: ALWAYS show check-in
@@ -40,9 +42,9 @@ struct MainTabView: View {
         if isTestMode {
             print("⚠️ TEST MODE: Check-in will show every time")
         } else if justCompletedOnboarding {
-            print("✅ First launch after onboarding - skipping check-in")
+            print("✅ First launch after onboarding - check-in skipped, date saved")
         } else {
-            print("📅 Returning user - check-in: \(shouldShow)")
+            print("📅 Returning user - check-in: \(shouldShow) (last: \(lastDate), today: \(today))")
         }
     }
     
@@ -68,6 +70,7 @@ struct MainTabView: View {
                         // Only save date in production mode
                         if !isTestMode {
                             lastCheckInDate = getTodayString()
+                            print("✅ Check-in complete - saved date: \(lastCheckInDate)")
                         }
                     }
                 }

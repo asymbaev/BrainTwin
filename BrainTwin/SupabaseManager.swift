@@ -12,15 +12,18 @@ class SupabaseManager: ObservableObject {
     
     @Published var isSignedIn = false
     @Published var userId: String?
-    @Published var isInitializing = true  // ✅ NEW: Loading state
+    @Published var isInitializing = true
     
     private var authStateTask: Task<Void, Never>?
     
     private init() {
+        // ✅ Supabase SDK v2.5.1+ auto-persists sessions to Keychain by default
         self.client = SupabaseClient(
             supabaseURL: URL(string: "https://yykxwlioounydxjikbjs.supabase.co")!,
             supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3h3bGlvb3VueWR4amlrYmpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3NzU4NjYsImV4cCI6MjA3NTM1MTg2Nn0.u2U6xApU-ViMe1FO5TtRa31-y76nEgohsF1jJ63rk0Q"
         )
+        
+        print("🔧 SupabaseManager initialized")
         
         // ✅ Check session on launch
         Task {
@@ -35,7 +38,7 @@ class SupabaseManager: ObservableObject {
     /// Checks if user has valid session AND exists in database
     private func checkExistingSession() async {
         do {
-            // Step 1: Check if auth session exists
+            // Step 1: Check if auth session exists (SDK auto-restores from Keychain)
             let session = try await client.auth.session
             let sessionUserId = session.user.id.uuidString
             
@@ -343,6 +346,7 @@ class SupabaseManager: ObservableObject {
     }
 
     // MARK: - API Calls
+    // Note: MeterResponse is already defined in Models.swift
 
     func getMeterData(userId: String) async throws -> MeterResponse {
         print("📊 Fetching meter data for user: \(userId)")
