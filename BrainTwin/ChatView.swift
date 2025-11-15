@@ -45,54 +45,60 @@ struct ChatView: View {
 
             VStack(spacing: 0) {
                 // Messages / Welcome
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            if viewModel.messages.isEmpty {
-                                VStack(spacing: 10) {
-                                    Text("Chat with Your Brain Twin")
-                                        .font(.title2.bold())
-                                        .foregroundColor(.appTextPrimary)
+                ScrollView {
+                    VStack(spacing: 16) {
+                        if viewModel.messages.isEmpty {
+                            VStack(spacing: 10) {
+                                Text("Chat with Your Brain Twin")
+                                    .font(.title2.bold())
+                                    .foregroundColor(.appTextPrimary)
 
-                                    Text("I'm here to help you understand your brain and overcome your challenges. Ask me anything!")
-                                        .font(.subheadline)
-                                        .foregroundColor(.appTextSecondary)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal)
-                                }
-                                .padding(.top, 18)
+                                Text("I'm here to help you understand your brain and overcome your challenges. Ask me anything!")
+                                    .font(.subheadline)
+                                    .foregroundColor(.appTextSecondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
                             }
-
-                            ForEach(viewModel.messages) { message in
-                                MessageBubble(message: message)
-                                    .id(message.id)
-                            }
-
-                            if viewModel.isLoading {
-                                HStack {
-                                    ProgressView()
-                                        .tint(.appAccent)
-                                        .padding(.leading, 16)
-                                    Text("Brain Twin is thinking...")
-                                        .font(.caption)
-                                        .foregroundColor(.appTextSecondary)
-                                    Spacer()
-                                }
-                                .padding(.vertical, 8)
-                            }
-
-                            // ✅ Spacer to push content up when keyboard appears
-                            Color.clear.frame(height: 16)
+                            .padding(.top, 18)
                         }
-                        .padding(.horizontal)
-                        .padding(.top, 4)
-                    }
-                    .onChange(of: viewModel.messages.count) { _, _ in
-                        if let last = viewModel.messages.last {
-                            withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+
+                        ForEach(viewModel.messages) { message in
+                            MessageBubble(message: message)
+                                .id(message.id)
                         }
+
+                        if viewModel.isLoading {
+                            HStack {
+                                ProgressView()
+                                    .tint(.appAccent)
+                                    .padding(.leading, 16)
+                                Text("Brain Twin is thinking...")
+                                    .font(.caption)
+                                    .foregroundColor(.appTextSecondary)
+                                Spacer()
+                            }
+                            .padding(.vertical, 8)
+                        }
+
+                        Color.clear.frame(height: 16)
                     }
+                    .padding(.horizontal)
+                    .padding(.top, 4)
                 }
+                /// 👇 Option A: tap anywhere in the chat area to dismiss keyboard
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isTextFieldFocused = false
+                }
+                /// 👇 Option C: swipe/drag down to dismiss keyboard
+                .simultaneousGesture(
+                    DragGesture().onChanged { value in
+                        if value.translation.height > 10 {
+                            isTextFieldFocused = false
+                        }
+                    }
+                )
+
 
                 // ✅ Input Area - FIXED FOR KEYBOARD
                 inputBar

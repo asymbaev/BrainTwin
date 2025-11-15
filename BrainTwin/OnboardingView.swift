@@ -1,5 +1,6 @@
 import SwiftUI
 import SuperwallKit
+import UIKit
 
 struct OnboardingView: View {
     @StateObject private var viewModel = OnboardingViewModel()
@@ -9,7 +10,37 @@ struct OnboardingView: View {
     
     @AppStorage("appearanceMode") private var appearanceMode = "system"
     
+//    @AppStorage("welcomeTypewriterCompleted") private var welcomeTypewriterCompleted = false
+    
+    @State private var welcomeTypewriterCompleted = false
+    
+    // MARK: - Typewriter config
+    private let typewriterCharacterDelay: TimeInterval = 0.065   // slightly slower
+
+
+
+    
     @Environment(\.colorScheme) var colorScheme
+    
+    @FocusState private var isAgeFieldFocused: Bool
+    
+    // MARK: - Typewriter state 👇
+    @State private var animatedWelcomeText = ""
+    @State private var animatedQuoteText = ""
+    @State private var isAnimatingWelcome = false
+    @State private var isAnimatingQuote = false
+    
+    @State private var hasAnimatedStep0 = false
+    
+    // MARK: - Typewriter config
+    private let welcomeTypingDelay: TimeInterval = 0.10   // slower, premium
+    private let quoteTypingDelay: TimeInterval = 0.065    // slightly faster
+
+
+    
+    private let fullWelcomeText = "Welcome"
+    private let fullQuoteText = "“If you don't program your mind, someone else will.”"
+    // -----------------------------------
     
     private var preferredColorScheme: ColorScheme? {
         switch appearanceMode {
@@ -42,7 +73,7 @@ struct OnboardingView: View {
             VStack(spacing: 0) {
                 // Progress indicator - NOW 5 STEPS
                 HStack(spacing: 8) {
-                    ForEach(0..<5, id: \.self) { index in
+                    ForEach(0..<6, id: \.self) { index in
                         Capsule()
                             .fill(index <= viewModel.currentStep ? Color.appAccent : Color.appTextTertiary)
                             .frame(height: 4)
@@ -52,11 +83,12 @@ struct OnboardingView: View {
                 
                 // Content
                 TabView(selection: $viewModel.currentStep) {
-                    screen0_NameCollection.tag(0)      // NEW
-                    screen1_AgeCollection.tag(1)       // NEW
-                    screen2_GoalSelection.tag(2)       // Was 0
-                    screen3_StruggleSelection.tag(3)   // Was 1
-                    screen4_TimeSelection.tag(4)       // Was 2
+                    screen0_WelcomeIntro.tag(0)
+                    screen1_NameCollection.tag(1)      // NEW
+                    screen1_AgeCollection.tag(2)       // NEW
+                    screen2_GoalSelection.tag(3)       // Was 0
+                    screen3_StruggleSelection.tag(4)   // Was 1
+                    screen4_TimeSelection.tag(5)       // Was 2
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             }
@@ -64,23 +96,100 @@ struct OnboardingView: View {
                 ProfileSetupAnimationView(isComplete: $setupComplete)
                     .onChange(of: setupComplete) { done in
                         if done {
-                            print("🎉 Animation complete! Setting onboarding complete...")
+                            print("🎉 Animation complete! Showing paywall next...")
                             
-                            isOnboardingComplete = true
-                            UserDefaults.standard.set(true, forKey: "justCompletedOnboarding")
-                            
+                            // ❌ Do NOT mark onboarding complete here anymore
+                            // isOnboardingComplete stays false until user actually subscribes
+
                             showProfileSetup = false
-                            
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                 showPaywall()
                             }
                         }
                     }
                     .interactiveDismissDisabled(true)
             }
+
         }
         .preferredColorScheme(preferredColorScheme)
     }
+    
+    // MARK: - Typewriter helpers 👇
+
+    private func startWelcomeAnimation() {
+        if welcomeTypewriterCompleted ||
+            (animatedWelcomeText == fullWelcomeText &&
+             animatedQuoteText == fullQuoteText) {
+            return
+        }
+
+        if isAnimatingWelcome || isAnimatingQuote {
+            return
+        }
+
+        animatedWelcomeText = ""
+        animatedQuoteText = ""
+        isAnimatingWelcome = true
+        isAnimatingQuote = false
+        typeNextCharacter(isWelcome: true, index: 0)
+    }
+
+    
+    private func typeNextCharacter(isWelcome: Bool, index: Int) {
+        let fullText = isWelcome ? fullWelcomeText : fullQuoteText
+        guard !fullText.isEmpty else { return }
+
+        // If we've reached the end of this text
+        if index >= fullText.count {
+            if isWelcome {
+                // Finished WELCOME → start quote
+                isAnimatingWelcome = false
+                isAnimatingQuote = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    self.typeNextCharacter(isWelcome: false, index: 0)
+                }
+            } else {
+                // Finished QUOTE → mark as completed
+                isAnimatingQuote = false
+                welcomeTypewriterCompleted = true
+            }
+            return
+        }
+
+        // Take characters from start up to index+1
+        let endIndex = fullText.index(fullText.startIndex, offsetBy: index + 1)
+        let substring = String(fullText[..<endIndex])
+
+        if isWelcome {
+            animatedWelcomeText = substring
+        } else {
+            animatedQuoteText = substring
+        }
+
+        // Haptic every 2 characters so it feels smoother, not “machine gun”
+        if isWelcome {
+            if index % 3 == 0 {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+        } else {
+            // keep quote at every 2
+            if index % 2 == 0 {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+        }
+
+
+        // Schedule next character with a slightly slower delay
+        let delay = isWelcome ? welcomeTypingDelay : quoteTypingDelay
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            self.typeNextCharacter(isWelcome: isWelcome, index: index + 1)
+        }
+
+    }
+
+
     
     // MARK: - Paywall (UPDATED - Age-based routing)
     private func showPaywall() {
@@ -141,10 +250,111 @@ struct OnboardingView: View {
         print("✅ Onboarding complete - user is subscribed!")
     }
     
+    private var screen0_WelcomeIntro: some View {
+        VStack(spacing: 0) {
+            Text("NEUROWIRE")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(.appTextPrimary)
+                .padding(.top, 24)
+
+            Spacer()
+
+            VStack(spacing: 16) {
+                // --- WELCOME TEXT ---
+                Text(fullWelcomeText)
+                    .font(.system(size: 36, weight: .bold))   // placeholder space
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .foregroundColor(.clear)
+                    .overlay(
+                        Text(animatedWelcomeText)
+                            .font(.system(size: 36, weight: .bold))   // animated hero text
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.appTextPrimary)
+                            .animation(nil, value: animatedWelcomeText)
+                    )
+
+                // --- QUOTE TEXT ---
+                Text(fullQuoteText)
+                    .font(.system(size: 20, weight: .medium))
+                    .italic()
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .frame(maxWidth: .infinity)
+                    .foregroundColor(.clear)
+                    .overlay(
+                        Text(animatedQuoteText)
+                            .font(.system(size: 20, weight: .medium))
+                            .italic()
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.appTextSecondary)
+                            .padding(.horizontal, 32)
+                            .animation(nil, value: animatedQuoteText)
+                    )
+
+
+                // --- STARS ---
+                HStack(spacing: 4) {
+                    Image(systemName: "laurel.leading")
+                    ForEach(0..<5) { _ in
+                        Image(systemName: "star.fill")
+                    }
+                    Image(systemName: "laurel.trailing")
+                }
+                .foregroundColor(.appAccent)
+                .padding(.top, 12)
+                // Make sure stars never inherit weird animations from the text changes
+                .animation(nil, value: animatedQuoteText)
+                .animation(nil, value: animatedWelcomeText)
+            }
+
+            Spacer()
+
+            Button("Continue") {
+                withAnimation {
+                    viewModel.currentStep = 1
+                }
+            }
+            .buttonStyle(OnboardingButtonStyle())
+            .padding(.horizontal)
+            .padding(.bottom, 40)
+        }
+        .padding(.horizontal)
+        .onAppear {
+            if welcomeTypewriterCompleted {
+                // already ran → show final static text
+                animatedWelcomeText = fullWelcomeText
+                animatedQuoteText  = fullQuoteText
+                isAnimatingWelcome = false
+                isAnimatingQuote   = false
+            } else {
+                startWelcomeAnimation()
+            }
+        }
+    }
+    
     // MARK: - Screen 0: Name Collection (NEW)
     
-    private var screen0_NameCollection: some View {
+    private var screen1_NameCollection: some View {
         VStack(spacing: 24) {
+            // 🔙 Back button
+                HStack {
+                    Button {
+                        withAnimation {
+                            viewModel.currentStep = 0
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                            Text("Back")
+                        }
+                        .foregroundColor(.appTextPrimary)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+
             Spacer()
             
             // Header
@@ -197,7 +407,7 @@ struct OnboardingView: View {
             // Continue Button
             Button("Continue") {
                 withAnimation {
-                    viewModel.currentStep = 1
+                    viewModel.currentStep = 2
                 }
             }
             .buttonStyle(OnboardingButtonStyle())
@@ -215,7 +425,7 @@ struct OnboardingView: View {
             HStack {
                 Button {
                     withAnimation {
-                        viewModel.currentStep = 0
+                        viewModel.currentStep = 1
                     }
                 } label: {
                     HStack(spacing: 4) {
@@ -253,6 +463,7 @@ struct OnboardingView: View {
                     .foregroundColor(.appTextPrimary)
                     .accentColor(.appAccent)
                     .keyboardType(.numberPad)
+                    .focused($isAgeFieldFocused)
                     .padding()
                     .background(
                         RoundedRectangle(cornerRadius: 16)
@@ -285,8 +496,9 @@ struct OnboardingView: View {
             
             // Continue Button
             Button("Continue") {
+                isAgeFieldFocused = false
                 withAnimation {
-                    viewModel.currentStep = 2
+                    viewModel.currentStep = 3
                 }
             }
             .buttonStyle(OnboardingButtonStyle())
@@ -304,7 +516,7 @@ struct OnboardingView: View {
             HStack {
                 Button {
                     withAnimation {
-                        viewModel.currentStep = 1
+                        viewModel.currentStep = 2
                     }
                 } label: {
                     HStack(spacing: 4) {
@@ -411,7 +623,7 @@ struct OnboardingView: View {
             // Continue Button
             Button("Continue") {
                 withAnimation {
-                    viewModel.currentStep = 3
+                    viewModel.currentStep = 4
                 }
             }
             .buttonStyle(OnboardingButtonStyle())
@@ -429,7 +641,7 @@ struct OnboardingView: View {
             HStack {
                 Button {
                     withAnimation {
-                        viewModel.currentStep = 2
+                        viewModel.currentStep = 3
                     }
                 } label: {
                     HStack(spacing: 4) {
@@ -542,7 +754,7 @@ struct OnboardingView: View {
             // Continue Button
             Button("Continue") {
                 withAnimation {
-                    viewModel.currentStep = 4
+                    viewModel.currentStep = 5
                 }
             }
             .buttonStyle(OnboardingButtonStyle())
@@ -560,7 +772,7 @@ struct OnboardingView: View {
             HStack {
                 Button {
                     withAnimation {
-                        viewModel.currentStep = 3
+                        viewModel.currentStep = 4
                     }
                 } label: {
                     HStack(spacing: 4) {

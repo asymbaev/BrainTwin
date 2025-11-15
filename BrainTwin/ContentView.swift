@@ -7,80 +7,78 @@ struct ContentView: View {
     @AppStorage("hasSeenIntro_v2") private var hasSeenIntro = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false  // ✅ FIXED: Now uses @AppStorage
     
-    @State private var isCheckingOnboarding = false
+//    @State private var isCheckingOnboarding = false
+//    @State private var showAnimation = true
     @State private var showAnimation = true
+
 
     var body: some View {
         Group {
-            // ⏳ INITIALIZING (checking for session)
             if supabase.isInitializing {
                 loadingView
-                
+
             } else if showAnimation {
-                // ⚡ OPENING ANIMATION
                 NeuralNetworkAnimationView {
                     showAnimation = false
                 }
-                
+
             } else if !hasSeenIntro {
-                // 📱 INTRO SCREEN
                 NeuroTwinIntroView {
                     hasSeenIntro = true
                 }
 
+            } else if !hasCompletedOnboarding {
+                // 📋 User has not finished onboarding + paywall yet
+                OnboardingView(isOnboardingComplete: $hasCompletedOnboarding)
+
             } else if !supabase.isSignedIn {
-                // 🔐 SIGN-IN
+                // 🔐 Onboarding done, NOW ask user to sign in
                 SignInView {
-                    Task { await handleSignedIn() }
+                    // when Supabase finishes sign-in, supabase.isSignedIn becomes true
+                    // and ContentView will automatically switch to MainTabView
                 }
 
-            } else if isCheckingOnboarding {
-                // ⏳ CHECKING ONBOARDING STATUS
-                loadingView
-
-            } else if hasCompletedOnboarding {
-                // ✅ DASHBOARD
+            } else {
+                // ✅ Fully onboarded + signed-in
                 MainTabView()
+            }
+        }
 
-            } else {
-                // 📋 ONBOARDING
-                OnboardingView(isOnboardingComplete: $hasCompletedOnboarding)
-            }
-        }
-        .task {
-            // ✅ Check onboarding status when signed in
-            if supabase.isSignedIn {
-                await handleSignedIn()
-            }
-        }
-        .onChange(of: supabase.isSignedIn) { signedIn in
-            if signedIn {
-                Task { await handleSignedIn() }
-            } else {
-                // User signed out - reset onboarding status
-                hasCompletedOnboarding = false
-            }
-        }
+//        .task {
+//            // ✅ Check onboarding status when signed in
+//            if supabase.isSignedIn {
+//                await handleSignedIn()
+//            }
+//        }
+//        .onChange(of: supabase.isSignedIn) { signedIn in
+//            if signedIn {
+//                Task { await handleSignedIn() }
+//            } else {
+//                // User signed out - reset onboarding status
+//                hasCompletedOnboarding = false
+//            }
+//        }
     }
     
     private var loadingView: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
             ProgressView()
-                .tint(.white)
+                .tint(.appAccent)
         }
     }
 
-    private func handleSignedIn() async {
-        print("🔄 Checking onboarding status from database...")
-        isCheckingOnboarding = true
-        
-        let completedInDB = await supabase.hasCompletedOnboarding()
-        
-        // ✅ Sync local storage with database
-        hasCompletedOnboarding = completedInDB
-        
-        print("✅ Onboarding status: \(completedInDB)")
-        isCheckingOnboarding = false
-    }
+
+//    private func handleSignedIn() async {
+//        print("🔄 Checking onboarding status from database...")
+//        isCheckingOnboarding = true
+//        
+//        let completedInDB = await supabase.hasCompletedOnboarding()
+//        
+//        // ✅ Sync local storage with database
+//        hasCompletedOnboarding = completedInDB
+//        
+//        print("✅ Onboarding status: \(completedInDB)")
+//        isCheckingOnboarding = false
+//    }
 }
