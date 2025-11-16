@@ -209,34 +209,33 @@ class OnboardingViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Save Onboarding Data (UPDATED - includes name and age)
+    // MARK: - Save Onboarding Data Locally (NEW - Receipt-based Auth)
     
     private func saveAllOnboardingData() async {
-        guard let userId = supabase.userId else {
-            print("❌ No user ID found")
-            return
-        }
+        let name = userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let age = ageInt ?? 0
+        let goal = finalGoalText
+        let struggle = finalStruggleText
+        let time = selectedTime
+        
+        let onboardingData = OnboardingData(
+            name: name,
+            age: age,
+            goal: goal,
+            struggle: struggle,
+            preferredTime: time
+        )
         
         do {
-            let name = userName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let age = ageInt ?? 0
-            let goal = finalGoalText
-            let struggle = finalStruggleText
-            let time = selectedTime
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(onboardingData)
+            UserDefaults.standard.set(data, forKey: "pendingOnboardingData")
             
-            // Save to Supabase with name and age
-            try await supabase.saveOnboardingData(
-                name: name,
-                age: age,
-                goal: goal,
-                struggle: struggle,
-                preferredTime: time
-            )
-            
-            print("✅ Onboarding data saved: name=\(name), age=\(age), goal=\(goal), struggle=\(struggle), time=\(time)")
+            print("✅ Onboarding data saved locally: name=\(name), age=\(age), goal=\(goal), struggle=\(struggle), time=\(time)")
+            print("📦 Data will be sent to backend after successful purchase")
             
         } catch {
-            print("❌ Save onboarding error: \(error)")
+            print("❌ Failed to save onboarding data locally: \(error)")
         }
     }
 }

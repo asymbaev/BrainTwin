@@ -1,3 +1,11 @@
+//
+//  SignInView.swift
+//  BrainTwin
+//
+//  Created by Dastan Asymbaev on 11/16/25.
+//
+
+
 import SwiftUI
 import AuthenticationServices
 

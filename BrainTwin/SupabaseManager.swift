@@ -361,4 +361,83 @@ class SupabaseManager: ObservableObject {
         print("✅ Meter data received: \(response.progress)% progress")
         return response
     }
+    
+    // MARK: - Receipt-Based Authentication
+    
+    /// Creates or identifies user from Apple receipt after purchase
+    func createOrIdentifyUserFromReceipt(originalTransactionId: String, onboardingData: OnboardingData) async throws -> String {
+        print("📱 Creating/identifying user from receipt: \(originalTransactionId)")
+        
+        struct ReceiptRequest: Encodable {
+            let originalTransactionId: String
+            let name: String
+            let age: Int
+            let goal: String
+            let struggle: String
+            let preferredTime: String
+        }
+        
+        struct ReceiptResponse: Decodable {
+            let userId: String
+            let created: Bool
+        }
+        
+        let request = ReceiptRequest(
+            originalTransactionId: originalTransactionId,
+            name: onboardingData.name,
+            age: onboardingData.age,
+            goal: onboardingData.goal,
+            struggle: onboardingData.struggle,
+            preferredTime: onboardingData.preferredTime
+        )
+        
+        let response: ReceiptResponse = try await client.functions.invoke(
+            "create-user-from-receipt",
+            options: FunctionInvokeOptions(
+                body: request
+            )
+        )
+        
+        // Store userId locally
+        self.userId = response.userId
+        self.isSignedIn = true
+        
+        print("✅ User \(response.created ? "created" : "identified") from receipt. User ID: \(response.userId)")
+        
+        return response.userId
+    }
+    
+    /// Restores user account from receipt on new device
+    func restoreUserFromReceipt(originalTransactionId: String) async throws -> String {
+        print("🔄 Restoring user from receipt: \(originalTransactionId)")
+        
+        struct RestoreRequest: Encodable {
+            let originalTransactionId: String
+        }
+        
+        struct RestoreResponse: Decodable {
+            let userId: String
+            let name: String?
+            let subscriptionStatus: String?
+        }
+        
+        let request = RestoreRequest(originalTransactionId: originalTransactionId)
+        
+        let response: RestoreResponse = try await client.functions.invoke(
+            "restore-user-from-receipt",
+            options: FunctionInvokeOptions(
+                body: request
+            )
+        )
+        
+        // Store userId locally
+        self.userId = response.userId
+        self.isSignedIn = true
+        
+        print("✅ User restored from receipt. User ID: \(response.userId)")
+        print("   Name: \(response.name ?? "Unknown")")
+        print("   Subscription: \(response.subscriptionStatus ?? "Unknown")")
+        
+        return response.userId
+    }
 }

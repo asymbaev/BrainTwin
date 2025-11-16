@@ -81,6 +81,15 @@ class PaywallEventDelegate: SuperwallDelegate {
             cancelDiscountTimer()
             
             Task {
+                // Create user account from receipt
+                do {
+                    try await SubscriptionManager.shared.createUserFromReceiptAfterPurchase()
+                    print("✅ User account created from receipt")
+                } catch {
+                    print("❌ Failed to create user from receipt: \(error)")
+                    print("   User will need to restore purchases")
+                }
+                
                 await SubscriptionManager.shared.refreshSubscription()
                 await trackPaywallNudge(converted: true)
             }
@@ -91,6 +100,14 @@ class PaywallEventDelegate: SuperwallDelegate {
             cancelDiscountTimer()
             
             Task {
+                // Restore user account from receipt
+                do {
+                    try await SubscriptionManager.shared.restorePurchases()
+                    print("✅ User account restored from receipt")
+                } catch {
+                    print("❌ Failed to restore user from receipt: \(error)")
+                }
+                
                 await SubscriptionManager.shared.refreshSubscription()
             }
 

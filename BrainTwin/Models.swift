@@ -1,5 +1,23 @@
 import Foundation
 
+// MARK: - Onboarding Data (Local Storage)
+
+struct OnboardingData: Codable {
+    let name: String
+    let age: Int
+    let goal: String
+    let struggle: String
+    let preferredTime: String
+    
+    enum CodingKeys: String, CodingKey {
+        case name
+        case age
+        case goal
+        case struggle
+        case preferredTime = "preferred_time"
+    }
+}
+
 // MARK: - Meter Response (for Dashboard)
 
 struct MeterResponse: Codable {
