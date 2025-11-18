@@ -32,15 +32,25 @@ struct ContentView: View {
                 OnboardingView(isOnboardingComplete: $hasCompletedOnboarding)
 
             } else if !supabase.isSignedIn {
-                // 🔄 Onboarding done but not signed in - show restore screen
-                // (This should rarely happen with receipt-based auth)
-                RestoreAccountView()
+                // 🔄 Onboarding done but not signed in
+                // Auto-restore should handle this, but show onboarding again as fallback
+                OnboardingView(isOnboardingComplete: $hasCompletedOnboarding)
 
             } else {
                 // ✅ Fully onboarded + signed-in via receipt
                 MainTabView()
             }
         }
+        // 🧪 DEBUG: Shake device to reset (remove before production)
+        .onShake {
+            print("🧪 DEBUG: Resetting app state...")
+            UserDefaults.standard.removeObject(forKey: "hasSeenIntro_v2")
+            UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
+            UserDefaults.standard.removeObject(forKey: "justCompletedOnboarding")
+            UserDefaults.standard.removeObject(forKey: "pendingOnboardingData")
+            exit(0)
+        }
+    }
 
 //        .task {
 //            // ✅ Check onboarding status when signed in
@@ -79,91 +89,36 @@ struct ContentView: View {
 //        print("✅ Onboarding status: \(completedInDB)")
 //        isCheckingOnboarding = false
 //    }
+
+
+// MARK: - Shake Gesture (Debug Only)
+
+extension View {
+    func onShake(perform action: @escaping () -> Void) -> some View {
+        self.modifier(DeviceShakeViewModifier(action: action))
+    }
 }
 
-// MARK: - Restore Account View
+struct DeviceShakeViewModifier: ViewModifier {
+    let action: () -> Void
+    
+    func body(content: Content) -> some View {
+        content
+            .onAppear()
+            .onReceive(NotificationCenter.default.publisher(for: UIDevice.deviceDidShakeNotification)) { _ in
+                action()
+            }
+    }
+}
 
-struct RestoreAccountView: View {
-    @StateObject private var subscriptionManager = SubscriptionManager.shared
-    @State private var showError = false
-    @State private var errorMessage = ""
-    
-    @Environment(\.colorScheme) var colorScheme
-    
-    var body: some View {
-        ZStack {
-            Color.appBackground.ignoresSafeArea()
-            
-            if colorScheme == .dark {
-                RadialGradient(
-                    colors: [Color(white: 0.04), .black],
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: 500
-                )
-                .ignoresSafeArea()
-            }
-            
-            VStack(spacing: 32) {
-                Spacer()
-                
-                // Icon
-                Image(systemName: "arrow.clockwise.circle.fill")
-                    .font(.system(size: 80))
-                    .foregroundColor(.appAccent)
-                
-                // Title
-                VStack(spacing: 12) {
-                    Text("Restore Your Account")
-                        .font(.title.bold())
-                        .foregroundColor(.appTextPrimary)
-                    
-                    Text("Tap below to restore your subscription and access your account")
-                        .font(.body)
-                        .foregroundColor(.appTextSecondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                }
-                
-                Spacer()
-                
-                // Restore Button
-                Button {
-                    Task {
-                        do {
-                            try await subscriptionManager.restorePurchases()
-                            print("✅ Account restored successfully")
-                        } catch {
-                            errorMessage = error.localizedDescription
-                            showError = true
-                        }
-                    }
-                } label: {
-                    HStack {
-                        if subscriptionManager.isRestoring {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: colorScheme == .dark ? .black : .white))
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                            Text("Restore Purchases")
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.appAccent)
-                    .foregroundColor(colorScheme == .dark ? .black : .white)
-                    .cornerRadius(12)
-                    .shadow(color: Color.appAccent.opacity(0.3), radius: 8)
-                }
-                .disabled(subscriptionManager.isRestoring)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 40)
-            }
-        }
-        .alert("Restore Failed", isPresented: $showError) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(errorMessage)
+extension UIDevice {
+    static let deviceDidShakeNotification = Notification.Name(rawValue: "deviceDidShakeNotification")
+}
+
+extension UIWindow {
+    open override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        if motion == .motionShake {
+            NotificationCenter.default.post(name: UIDevice.deviceDidShakeNotification, object: nil)
         }
     }
 }

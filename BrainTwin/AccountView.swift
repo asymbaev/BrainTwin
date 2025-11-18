@@ -2,7 +2,6 @@ import SwiftUI
 
 struct AccountView: View {
     @StateObject private var supabase = SupabaseManager.shared
-    @StateObject private var subscriptionManager = SubscriptionManager.shared
     @Environment(\.colorScheme) var colorScheme
     
     @AppStorage("appearanceMode") private var appearanceMode = "system"
@@ -10,9 +9,6 @@ struct AccountView: View {
     @State private var showImagePicker = false
     @State private var avatarImage: UIImage?
     @State private var showSubscription = false
-    @State private var showRestoreSuccess = false
-    @State private var showRestoreError = false
-    @State private var restoreErrorMessage = ""
     
     private var preferredColorScheme: ColorScheme? {
         switch appearanceMode {
@@ -125,24 +121,6 @@ struct AccountView: View {
                         .padding(.horizontal, 20)
                     InsetSection {
                         SettingsRow(
-                            icon: "arrow.clockwise.circle.fill",
-                            title: "Restore Purchases",
-                            subtitle: subscriptionManager.isRestoring ? "Restoring..." : nil,
-                            tint: .appAccent,
-                            showChevron: false
-                        ) {
-                            Task {
-                                do {
-                                    try await subscriptionManager.restorePurchases()
-                                    showRestoreSuccess = true
-                                } catch {
-                                    restoreErrorMessage = error.localizedDescription
-                                    showRestoreError = true
-                                }
-                            }
-                        }
-                        SettingsDivider()
-                        SettingsRow(
                             icon: "rectangle.portrait.and.arrow.right",
                             title: supabase.isSignedIn ? "Sign Out" : "Login",
                             subtitle: nil,
@@ -180,16 +158,6 @@ struct AccountView: View {
             BottomGroundingBar(height: groundingHeight)
                 .allowsHitTesting(false) // never block tab bar interactions
                 .ignoresSafeArea(edges: .bottom)
-        }
-        .alert("Success", isPresented: $showRestoreSuccess) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("Your purchases have been restored successfully!")
-        }
-        .alert("Restore Failed", isPresented: $showRestoreError) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(restoreErrorMessage)
         }
     }
     

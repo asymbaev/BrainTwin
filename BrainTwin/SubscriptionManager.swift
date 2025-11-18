@@ -12,6 +12,14 @@ import Supabase
 import Combine
 import StoreKit
 
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let purchaseCompleted = Notification.Name("purchaseCompleted")
+}
+
+// MARK: - Subscription Manager
+
 @MainActor
 class SubscriptionManager: ObservableObject {
     static let shared = SubscriptionManager()
@@ -27,6 +35,8 @@ class SubscriptionManager: ObservableObject {
         // Check status on init
         Task {
             await checkSubscriptionStatus()
+            // Auto-restore from receipt if user has subscription but no account
+            await autoRestoreFromReceiptIfNeeded()
         }
     }
     
@@ -36,12 +46,27 @@ class SubscriptionManager: ObservableObject {
         
         // Check with Superwall
         let status = Superwall.shared.subscriptionStatus
+        let hasAccount = SupabaseManager.shared.userId != nil
+        
+        print("🔍 Checking subscription status: \(status)")
+        print("   Has userId: \(hasAccount)")
         
         switch status {
         case .active:
-            isSubscribed = true
-            await saveSubscriptionToDatabase(isActive: true)
-            print("✅ User is subscribed")
+            // Only mark as subscribed if user also has an account
+            // This prevents false positives from cached sandbox data
+            if hasAccount {
+                isSubscribed = true
+                await saveSubscriptionToDatabase(isActive: true)
+                print("✅ User is subscribed (with account)")
+            } else {
+                // CRITICAL: Force Superwall to update status to INACTIVE
+                // This fixes the cached sandbox data issue
+                isSubscribed = false
+                Superwall.shared.subscriptionStatus = .inactive
+                print("⚠️ Superwall had cached ACTIVE status but no account found")
+                print("   → Forcing Superwall status to INACTIVE to allow paywall")
+            }
             
         case .inactive, .unknown:
             isSubscribed = false
@@ -150,6 +175,47 @@ class SubscriptionManager: ObservableObject {
         await checkSubscriptionStatus()
         
         print("✅ Purchases restored successfully. User ID: \(userId)")
+    }
+    
+    // MARK: - Auto-Restore on Launch
+    
+    /// Automatically restores user account from receipt on app launch (if needed)
+    private func autoRestoreFromReceiptIfNeeded() async {
+        // Only auto-restore if user is NOT already signed in
+        guard !SupabaseManager.shared.isSignedIn else {
+            print("✅ User already signed in, no auto-restore needed")
+            return
+        }
+        
+        // Only auto-restore if onboarding was completed before
+        // This prevents auto-restore for truly fresh users
+        guard UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") else {
+            print("ℹ️ User hasn't completed onboarding yet, skipping auto-restore")
+            return
+        }
+        
+        // Check if there's a valid subscription receipt
+        guard let originalTransactionId = try? await getCurrentOriginalTransactionId() else {
+            print("ℹ️ No subscription receipt found - user is new")
+            return
+        }
+        
+        print("🔄 Found subscription receipt, auto-restoring user account...")
+        print("   Receipt ID: \(originalTransactionId)")
+        
+        do {
+            // Silently restore user account from receipt
+            let userId = try await SupabaseManager.shared.restoreUserFromReceipt(
+                originalTransactionId: originalTransactionId
+            )
+            
+            await checkSubscriptionStatus()
+            
+            print("✅ Auto-restore successful! User ID: \(userId)")
+        } catch {
+            print("⚠️ Auto-restore failed: \(error.localizedDescription)")
+            // Silent failure - user can continue as new user
+        }
     }
     
     // MARK: - Helper Methods

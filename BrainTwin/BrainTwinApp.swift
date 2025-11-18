@@ -5,13 +5,14 @@ import Supabase
 
 @main
 struct BrainTwinApp: App {
+    private let paywallDelegate = PaywallEventDelegate()
 
     init() {
         // Initialize Superwall
         Superwall.configure(apiKey: "pk_Ned_vvu1JG8DJn_kq2HS5")
 
         // Set delegate
-        Superwall.shared.delegate = PaywallEventDelegate()
+        Superwall.shared.delegate = paywallDelegate
     }
 
     var body: some Scene {
@@ -88,9 +89,17 @@ class PaywallEventDelegate: SuperwallDelegate {
                 } catch {
                     print("❌ Failed to create user from receipt: \(error)")
                     print("   User will need to restore purchases")
+                    return
                 }
                 
+                // Refresh subscription status (this updates isSubscribed)
                 await SubscriptionManager.shared.refreshSubscription()
+                
+                // CRITICAL: Post notification AFTER subscription is refreshed
+                // This ensures OnboardingView sees both userId AND isSubscribed=true
+                print("📣 Posting purchase completion notification...")
+                NotificationCenter.default.post(name: .purchaseCompleted, object: nil)
+                
                 await trackPaywallNudge(converted: true)
             }
 

@@ -113,6 +113,13 @@ struct OnboardingView: View {
 
         }
         .preferredColorScheme(preferredColorScheme)
+        .onReceive(NotificationCenter.default.publisher(for: .purchaseCompleted)) { _ in
+            // Purchase completed! Check subscription and complete onboarding
+            print("🎉 Purchase notification received!")
+            Task {
+                await checkIfUserSubscribed()
+            }
+        }
     }
     
     // MARK: - Typewriter helpers 👇
@@ -191,14 +198,40 @@ struct OnboardingView: View {
 
 
     
-    // MARK: - Paywall (UPDATED - Age-based routing)
+    // MARK: - Paywall (Age-based routing)
+    @State private var paywallAttempts = 0
+    
     private func showPaywall() {
-        // Determine campaign based on user's age
+        paywallAttempts += 1
+        
+        // Prevent infinite loop - max 3 attempts
+        if paywallAttempts > 3 {
+            print("⚠️ Paywall failed to show after 3 attempts")
+            print("⚠️ Check Superwall dashboard - placements may not have rules configured")
+            
+            // Show alert to user
+            DispatchQueue.main.async {
+                let alert = UIAlertController(
+                    title: "Paywall Configuration Issue",
+                    message: "The paywall is not configured properly in Superwall. Please check your Superwall dashboard and ensure your age-based placements (18-22, 23-28, etc.) have rules configured.\n\nFor testing: Status is ACTIVE=\(Superwall.shared.subscriptionStatus), but no userId found.",
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let rootVC = windowScene.windows.first?.rootViewController {
+                    rootVC.present(alert, animated: true)
+                }
+            }
+            return
+        }
+        
         let campaign = determineCampaignByAge(age: viewModel.ageInt ?? 25)
         
         print("🎯 Triggering Superwall campaign: \(campaign) for age: \(viewModel.ageInt ?? 25)")
+        print("   Attempt: \(paywallAttempts)/3")
+        print("   Current subscriptionStatus: \(Superwall.shared.subscriptionStatus)")
         
-        // Register the age-specific campaign
         Superwall.shared.register(placement: campaign)
         
         Task {
@@ -224,21 +257,51 @@ struct OnboardingView: View {
     }
 
     private func checkIfUserSubscribed() async {
+        print("🔍 [OnboardingView] Starting subscription check...")
+        
         await SubscriptionManager.shared.refreshSubscription()
         
-        if SubscriptionManager.shared.isSubscribed {
+        // CRITICAL: Only complete onboarding if BOTH subscription AND account exist
+        let isSubscribed = SubscriptionManager.shared.isSubscribed
+        let hasUserId = SupabaseManager.shared.userId != nil
+        let userId = SupabaseManager.shared.userId ?? "nil"
+        
+        print("📊 [OnboardingView] First check:")
+        print("   isSubscribed: \(isSubscribed)")
+        print("   hasUserId: \(hasUserId)")
+        print("   userId: \(userId)")
+        
+        if isSubscribed && hasUserId {
+            // User has BOTH subscription AND account created from receipt
+            print("✅ [OnboardingView] Both conditions met! Completing onboarding...")
             await MainActor.run {
                 completeOnboarding()
             }
         } else {
+            // Wait longer for account creation to complete
+            print("⏳ [OnboardingView] Conditions not met, waiting 3 seconds...")
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             
             await MainActor.run {
-                if !SubscriptionManager.shared.isSubscribed {
-                    print("⚠️ User didn't subscribe, showing paywall again...")
-                    showPaywall()
-                } else {
+                let stillSubscribed = SubscriptionManager.shared.isSubscribed
+                let nowHasUserId = SupabaseManager.shared.userId != nil
+                let nowUserId = SupabaseManager.shared.userId ?? "nil"
+                
+                print("📊 [OnboardingView] Recheck after 3s:")
+                print("   isSubscribed: \(stillSubscribed)")
+                print("   hasUserId: \(nowHasUserId)")
+                print("   userId: \(nowUserId)")
+                
+                if stillSubscribed && nowHasUserId {
+                    // Account created successfully
+                    print("✅ [OnboardingView] Both conditions met on recheck! Completing onboarding...")
                     completeOnboarding()
+                } else {
+                    print("⚠️ [OnboardingView] Conditions still not met after recheck")
+                    print("   → Showing paywall again...")
+                    
+                    // Show paywall again
+                    showPaywall()
                 }
             }
         }
@@ -247,6 +310,7 @@ struct OnboardingView: View {
     private func completeOnboarding() {
         isOnboardingComplete = true
         UserDefaults.standard.set(true, forKey: "justCompletedOnboarding")
+        paywallAttempts = 0 // Reset counter for next time
         print("✅ Onboarding complete - user is subscribed!")
     }
     
