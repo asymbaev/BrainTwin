@@ -206,26 +206,10 @@ struct OnboardingView: View {
         
         // Prevent infinite loop - max 3 attempts
         if paywallAttempts > 3 {
-            print("⚠️ Paywall failed to show after 3 attempts")
-            print("⚠️ Check Superwall dashboard - placements may not have rules configured")
-            
-            // Show alert to user
-            DispatchQueue.main.async {
-                let alert = UIAlertController(
-                    title: "Paywall Configuration Issue",
-                    message: "The paywall is not configured properly in Superwall. Please check your Superwall dashboard and ensure your age-based placements (18-22, 23-28, etc.) have rules configured.\n\nFor testing: Status is ACTIVE=\(Superwall.shared.subscriptionStatus), but no userId found.",
-                    preferredStyle: .alert
-                )
-                alert.addAction(UIAlertAction(title: "OK", style: .default))
-                
-                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                   let rootVC = windowScene.windows.first?.rootViewController {
-                    rootVC.present(alert, animated: true)
-                }
-            }
+            print("⚠️ Paywall failed to show after 3 attempts - allowing user through")
+            isOnboardingComplete = true
             return
         }
-        
         let campaign = determineCampaignByAge(age: viewModel.ageInt ?? 25)
         
         print("🎯 Triggering Superwall campaign: \(campaign) for age: \(viewModel.ageInt ?? 25)")

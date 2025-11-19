@@ -8,10 +8,7 @@ struct BrainTwinApp: App {
     private let paywallDelegate = PaywallEventDelegate()
 
     init() {
-        // Initialize Superwall
         Superwall.configure(apiKey: "pk_Ned_vvu1JG8DJn_kq2HS5")
-
-        // Set delegate
         Superwall.shared.delegate = paywallDelegate
     }
 
@@ -25,107 +22,71 @@ struct BrainTwinApp: App {
 // MARK: - Paywall Delegate
 
 class PaywallEventDelegate: SuperwallDelegate {
-
-    /// The placement you use in OnboardingView.showPaywall()
-    /// We'll force the user back into this paywall when they close it without paying.
     private let onboardingPlacement = "onboarding_complete"
-    
-    /// Track when paywall was first shown for discount timer
     private var paywallShownTime: Date?
-    
-    /// Timer for showing discount after 5 minutes
     private var discountTimer: Timer?
 
     @MainActor
     func handleSuperwallEvent(withInfo eventInfo: SuperwallEventInfo) {
         switch eventInfo.event {
         
-        // 👁️ Paywall was presented
         case .paywallOpen:
             print("👁️ Paywall opened!")
             startDiscountTimer()
 
-        // 🔒 User closed or declined the paywall
-        case .paywallClose(_),
-             .paywallDecline(_):
+        case .paywallClose(_), .paywallDecline(_):
             cancelDiscountTimer()
             
             let status = Superwall.shared.subscriptionStatus
 
             switch status {
             case .active:
-                // User is subscribed → allow them to continue
                 print("💳 Paywall closed with ACTIVE subscription. Letting user through.")
 
             case .inactive, .unknown:
-                // User is NOT subscribed → schedule notification and track
                 print("⛔️ Paywall closed WITHOUT subscription.")
                 
-                // Schedule discount notification for non-subscribers
                 Task {
                     await scheduleDiscountNotification()
                     await trackPaywallNudge(converted: false)
                 }
                 
-                // Re-open paywall
                 Superwall.shared.register(placement: onboardingPlacement)
 
             @unknown default:
-                // Be defensive: treat unknown as not-subscribed
                 print("⚠️ Unknown subscription status on paywall close. Re-opening paywall…")
                 Superwall.shared.register(placement: onboardingPlacement)
             }
 
-        // ✅ Successful purchase
         case .transactionComplete:
             print("✅ Purchase completed!")
             cancelDiscountTimer()
             
             Task {
-                // Create user account from receipt
+                // ✅ NEW: Unified identify function
                 do {
-                    try await SubscriptionManager.shared.createUserFromReceiptAfterPurchase()
-                    print("✅ User account created from receipt")
+                    try await SubscriptionManager.shared.identifyUserFromReceiptAfterPurchase()
+                    print("✅ User identified from receipt")
                 } catch {
-                    print("❌ Failed to create user from receipt: \(error)")
-                    print("   User will need to restore purchases")
+                    print("❌ Failed to identify user from receipt: \(error)")
                     return
                 }
                 
-                // Refresh subscription status (this updates isSubscribed)
                 await SubscriptionManager.shared.refreshSubscription()
                 
-                // CRITICAL: Post notification AFTER subscription is refreshed
-                // This ensures OnboardingView sees both userId AND isSubscribed=true
                 print("📣 Posting purchase completion notification...")
                 NotificationCenter.default.post(name: .purchaseCompleted, object: nil)
                 
                 await trackPaywallNudge(converted: true)
             }
 
-        // ♻️ Restored purchase
-        case .transactionRestore:
-            print("♻️ Purchase restored!")
-            cancelDiscountTimer()
-            
-            Task {
-                // Restore user account from receipt
-                do {
-                    try await SubscriptionManager.shared.restorePurchases()
-                    print("✅ User account restored from receipt")
-                } catch {
-                    print("❌ Failed to restore user from receipt: \(error)")
-                }
-                
-                await SubscriptionManager.shared.refreshSubscription()
-            }
+        // ✅ REMOVED: transactionRestore case - automatic identification on launch handles this
 
         default:
             break
         }
     }
 
-    /// Keep SubscriptionManager in sync if Superwall changes status internally
     @MainActor
     func subscriptionStatusDidChange(
         from oldValue: SubscriptionStatus,
@@ -139,16 +100,12 @@ class PaywallEventDelegate: SuperwallDelegate {
     
     // MARK: - Discount Timer Logic
     
-    /// Start 5-minute timer when paywall opens
     private func startDiscountTimer() {
         paywallShownTime = Date()
-        
-        // Cancel any existing timer
         cancelDiscountTimer()
         
         print("⏱️ Starting 5-minute discount timer...")
         
-        // Schedule timer for 5 minutes (300 seconds)
         discountTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 await self?.showDiscountButton()
@@ -156,7 +113,6 @@ class PaywallEventDelegate: SuperwallDelegate {
         }
     }
     
-    /// Cancel discount timer if user subscribes or closes paywall early
     private func cancelDiscountTimer() {
         discountTimer?.invalidate()
         discountTimer = nil
@@ -164,60 +120,41 @@ class PaywallEventDelegate: SuperwallDelegate {
         print("⏱️ Discount timer cancelled")
     }
     
-    /// Show discount button after 5 minutes
     @MainActor
     private func showDiscountButton() async {
         print("🎁 5 minutes elapsed! Showing discount button...")
-        
-        // Trigger Superwall "Discount Button" campaign
         Superwall.shared.register(placement: "show_discount_button")
-        
-        // Track in Supabase
         await trackDiscountShown()
     }
     
     // MARK: - Notification Logic
     
-    /// Schedule discount notification 5 minutes after paywall view
     @MainActor
     private func scheduleDiscountNotification() async {
-        // Get user's name from Supabase
         guard let userName = await getUserName() else {
             print("❌ Could not get user name for notification")
             return
         }
         
         let center = UNUserNotificationCenter.current()
-        
-        // Remove any pending discount notifications
         center.removePendingNotificationRequests(withIdentifiers: ["discount_nudge"])
         
         let content = UNMutableNotificationContent()
         content.title = "Hey \(userName) 👋"
         content.body = "You made it this far. You're about to invest in your life - here's 80% off!"
         content.sound = .default
-        content.badge = 1
         
-        // Trigger 5 minutes from now
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 300, repeats: false)
-        
-        let request = UNNotificationRequest(
-            identifier: "discount_nudge",
-            content: content,
-            trigger: trigger
-        )
+        let request = UNNotificationRequest(identifier: "discount_nudge", content: content, trigger: trigger)
         
         do {
             try await center.add(request)
-            print("✅ Discount notification scheduled for 5 minutes from now")
+            print("✅ Discount notification scheduled for 5 minutes")
         } catch {
             print("❌ Failed to schedule notification: \(error)")
         }
     }
     
-    // MARK: - Supabase Tracking
-    
-    /// Get user's name from Supabase for personalized notification
     @MainActor
     private func getUserName() async -> String? {
         do {
@@ -241,7 +178,6 @@ class PaywallEventDelegate: SuperwallDelegate {
         }
     }
     
-    /// Track when discount is shown to user
     @MainActor
     private func trackDiscountShown() async {
         do {
@@ -274,7 +210,6 @@ class PaywallEventDelegate: SuperwallDelegate {
         }
     }
     
-    /// Track paywall outcome (converted or not)
     @MainActor
     private func trackPaywallNudge(converted: Bool) async {
         do {

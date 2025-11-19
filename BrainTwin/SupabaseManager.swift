@@ -17,7 +17,6 @@ class SupabaseManager: ObservableObject {
     private var authStateTask: Task<Void, Never>?
     
     private init() {
-        // ✅ Supabase SDK v2.5.1+ auto-persists sessions to Keychain by default
         self.client = SupabaseClient(
             supabaseURL: URL(string: "https://yykxwlioounydxjikbjs.supabase.co")!,
             supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3h3bGlvb3VueWR4amlrYmpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3NzU4NjYsImV4cCI6MjA3NTM1MTg2Nn0.u2U6xApU-ViMe1FO5TtRa31-y76nEgohsF1jJ63rk0Q"
@@ -25,7 +24,6 @@ class SupabaseManager: ObservableObject {
         
         print("🔧 SupabaseManager initialized")
         
-        // ✅ Check session on launch
         Task {
             await checkExistingSession()
             setupAuthStateListener()
@@ -35,16 +33,13 @@ class SupabaseManager: ObservableObject {
     
     // MARK: - Session Restoration
     
-    /// Checks if user has valid session AND exists in database
     private func checkExistingSession() async {
         do {
-            // Step 1: Check if auth session exists (SDK auto-restores from Keychain)
             let session = try await client.auth.session
             let sessionUserId = session.user.id.uuidString
             
             print("🔍 Found auth session for user: \(sessionUserId)")
             
-            // Step 2: Verify user EXISTS in database
             do {
                 let _: BrainTwinUser = try await client
                     .from("users")
@@ -54,13 +49,11 @@ class SupabaseManager: ObservableObject {
                     .execute()
                     .value
                 
-                // ✅ Session valid AND user exists in database
                 self.isSignedIn = true
                 self.userId = sessionUserId
                 print("✅ Session restored! User exists in database. User ID: \(sessionUserId)")
                 
             } catch {
-                // ❌ Session exists but user NOT in database - SIGN OUT
                 print("⚠️ Session exists but user NOT in database. Signing out...")
                 try? await client.auth.signOut()
                 self.isSignedIn = false
@@ -69,7 +62,6 @@ class SupabaseManager: ObservableObject {
             }
             
         } catch {
-            // No active session found
             self.isSignedIn = false
             self.userId = nil
             print("ℹ️ No existing session - showing sign in")
@@ -78,7 +70,6 @@ class SupabaseManager: ObservableObject {
     
     // MARK: - Auth State Listener
     
-    /// Listens for auth state changes (sign out, token refresh, etc.)
     private func setupAuthStateListener() {
         authStateTask = Task {
             for await state in await client.auth.authStateChanges {
@@ -113,13 +104,13 @@ class SupabaseManager: ObservableObject {
         self.isSignedIn = true
         self.userId = session.user.id.uuidString
         print("✅ Signed in! User ID: \(session.user.id.uuidString)")
-        
-        // Create user in database
+
         try await createUserIfNeeded(userId: session.user.id.uuidString)
     }
 
-    private func createUserIfNeeded(userId: String) async throws {
-        // Check if user exists
+    // MARK: - Create user if needed
+
+    func createUserIfNeeded(userId: String) async throws {
         do {
             let _: BrainTwinUser = try await client
                 .from("users")
@@ -130,9 +121,9 @@ class SupabaseManager: ObservableObject {
                 .value
             
             print("✅ User already exists in database")
+            
         } catch {
-            // User doesn't exist, create them
-            print("📝 Creating new user in database...")
+            print("📝 User does not exist, creating...")
             
             struct NewUser: Encodable {
                 let id: String
@@ -141,17 +132,17 @@ class SupabaseManager: ObservableObject {
                 let rewire_progress: Double
                 let current_streak: Int
                 let skill_level: String
-                let onboarding_completed: Bool
+                let created_at: String
             }
             
             let newUser = NewUser(
                 id: userId,
-                email: "anon-\(userId.prefix(8))@braintwin.app",
-                main_struggle: "procrastination",
+                email: "\(userId)@anon.braintwin.app",
+                main_struggle: "Not specified",
                 rewire_progress: 0,
                 current_streak: 0,
                 skill_level: "foggy",
-                onboarding_completed: false
+                created_at: ISO8601DateFormatter().string(from: Date())
             )
             
             try await client
@@ -159,9 +150,111 @@ class SupabaseManager: ObservableObject {
                 .insert(newUser)
                 .execute()
             
-            print("✅ User created in database!")
+            print("✅ User created successfully")
         }
     }
+
+    // MARK: - Sign Out
+
+    func signOut() async throws {
+        try await client.auth.signOut()
+        self.isSignedIn = false
+        self.userId = nil
+        
+        UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
+        
+        print("👋 Signed out successfully")
+    }
+
+    // MARK: - API Calls
+
+    func getMeterData(userId: String) async throws -> MeterResponse {
+        print("📊 Fetching meter data for user: \(userId)")
+        
+        let response: MeterResponse = try await client.functions.invoke(
+            "calculate-meter",
+            options: FunctionInvokeOptions(
+                body: ["userId": userId]
+            )
+        )
+        
+        print("✅ Meter data received: \(response.progress)% progress")
+        return response
+    }
+    
+    // MARK: - Receipt-Based Authentication (UNIFIED)
+    
+    /// Unified function: Identifies or creates user from Apple receipt
+    /// Works for BOTH first-time users AND returning users
+    func identifyUserFromReceipt(originalTransactionId: String, onboardingData: OnboardingData?) async throws -> (userId: String, isNewUser: Bool) {
+        print("📱 Identifying user from receipt: \(originalTransactionId)")
+        
+        struct ReceiptRequest: Encodable {
+            let originalTransactionId: String
+            let onboardingData: OnboardingDataPayload?
+            
+            struct OnboardingDataPayload: Encodable {
+                let name: String?
+                let age: Int?
+                let goal: String?
+                let struggle: String?
+                let preferredTime: String?
+            }
+        }
+        
+        struct ReceiptResponse: Decodable {
+            let userId: String
+            let isNewUser: Bool
+            let userData: UserData?
+            
+            struct UserData: Decodable {
+                let name: String?
+                let age: Int?
+                let goal: String?
+                let main_struggle: String?
+                let skill_level: String?
+                let is_premium: Bool?
+            }
+        }
+        
+        let onboardingPayload = onboardingData.map { data in
+            ReceiptRequest.OnboardingDataPayload(
+                name: data.name,
+                age: data.age,
+                goal: data.goal,
+                struggle: data.struggle,
+                preferredTime: data.preferredTime
+            )
+        }
+        
+        let request = ReceiptRequest(
+            originalTransactionId: originalTransactionId,
+            onboardingData: onboardingPayload
+        )
+        
+        let response: ReceiptResponse = try await client.functions.invoke(
+            "identify-user-from-receipt",
+            options: FunctionInvokeOptions(
+                body: request
+            )
+        )
+        
+        // Store userId locally
+        self.userId = response.userId
+        self.isSignedIn = true
+        
+        let status = response.isNewUser ? "created" : "identified"
+        print("✅ User \(status) from receipt. User ID: \(response.userId)")
+        
+        if let userData = response.userData {
+            print("   Name: \(userData.name ?? "Unknown")")
+            print("   Premium: \(userData.is_premium ?? false)")
+        }
+        
+        return (userId: response.userId, isNewUser: response.isNewUser)
+    }
+    
+    // MARK: - Email sign in / sign up
 
     struct BrainTwinUser: Codable {
         let id: String
@@ -178,22 +271,10 @@ class SupabaseManager: ObservableObject {
         let age: Int?
         
         enum CodingKeys: String, CodingKey {
-            case id
-            case email
-            case main_struggle
-            case rewire_progress
-            case current_streak
-            case skill_level
-            case onboarding_completed
-            case goal
-            case biggest_struggle
-            case preferred_time
-            case name
-            case age
+            case id, email, main_struggle, rewire_progress, current_streak, skill_level
+            case onboarding_completed, goal, biggest_struggle, preferred_time, name, age
         }
     }
-
-    // MARK: - Email sign in / sign up
 
     func signInOrSignUpWithEmail(email: String, password: String) async throws {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -330,114 +411,5 @@ class SupabaseManager: ObservableObject {
         print("✅ Signed in with Apple. User ID: \(session.user.id.uuidString)")
 
         try await createUserIfNeeded(userId: session.user.id.uuidString)
-    }
-
-    // MARK: - Sign Out
-
-    func signOut() async throws {
-        try await client.auth.signOut()
-        self.isSignedIn = false
-        self.userId = nil
-        
-        // ✅ Clear local storage
-        UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
-        
-        print("👋 Signed out successfully")
-    }
-
-    // MARK: - API Calls
-    // Note: MeterResponse is already defined in Models.swift
-
-    func getMeterData(userId: String) async throws -> MeterResponse {
-        print("📊 Fetching meter data for user: \(userId)")
-        
-        let response: MeterResponse = try await client.functions.invoke(
-            "calculate-meter",
-            options: FunctionInvokeOptions(
-                body: ["userId": userId]
-            )
-        )
-        
-        print("✅ Meter data received: \(response.progress)% progress")
-        return response
-    }
-    
-    // MARK: - Receipt-Based Authentication
-    
-    /// Creates or identifies user from Apple receipt after purchase
-    func createOrIdentifyUserFromReceipt(originalTransactionId: String, onboardingData: OnboardingData) async throws -> String {
-        print("📱 Creating/identifying user from receipt: \(originalTransactionId)")
-        
-        struct ReceiptRequest: Encodable {
-            let originalTransactionId: String
-            let name: String
-            let age: Int
-            let goal: String
-            let struggle: String
-            let preferredTime: String
-        }
-        
-        struct ReceiptResponse: Decodable {
-            let userId: String
-            let created: Bool
-        }
-        
-        let request = ReceiptRequest(
-            originalTransactionId: originalTransactionId,
-            name: onboardingData.name,
-            age: onboardingData.age,
-            goal: onboardingData.goal,
-            struggle: onboardingData.struggle,
-            preferredTime: onboardingData.preferredTime
-        )
-        
-        let response: ReceiptResponse = try await client.functions.invoke(
-            "create-user-from-receipt",
-            options: FunctionInvokeOptions(
-                body: request
-            )
-        )
-        
-        // Store userId locally
-        self.userId = response.userId
-        self.isSignedIn = true
-        
-        print("✅ User \(response.created ? "created" : "identified") from receipt. User ID: \(response.userId)")
-        
-        return response.userId
-    }
-    
-    /// Restores user account from receipt on new device
-    func restoreUserFromReceipt(originalTransactionId: String) async throws -> String {
-        print("🔄 Restoring user from receipt: \(originalTransactionId)")
-        
-        struct RestoreRequest: Encodable {
-            let originalTransactionId: String
-        }
-        
-        struct RestoreResponse: Decodable {
-            let userId: String
-            let name: String?
-            let subscriptionStatus: String?
-        }
-        
-        let request = RestoreRequest(originalTransactionId: originalTransactionId)
-        
-        let response: RestoreResponse = try await client.functions.invoke(
-            "restore-user-from-receipt",
-            options: FunctionInvokeOptions(
-                body: request
-            )
-        )
-        
-        // Store userId locally
-        self.userId = response.userId
-        self.isSignedIn = true
-        
-        print("✅ User restored from receipt. User ID: \(response.userId)")
-        print("   Name: \(response.name ?? "Unknown")")
-        print("   Subscription: \(response.subscriptionStatus ?? "Unknown")")
-        
-        return response.userId
     }
 }
