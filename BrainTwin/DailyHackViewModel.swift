@@ -28,9 +28,29 @@ class DailyHackViewModel: ObservableObject {
             return
         }
         
-        do {
-            print("🧠 Loading today's hack (instant)...")
+        // ✅ FIRST: Check if data was already pre-fetched during animation
+        let meterManager = MeterDataManager.shared
+        
+        if let cachedHack = meterManager.todaysHack,
+           let lastFetch = meterManager.lastHackFetchDate,
+           Date().timeIntervalSince(lastFetch) < 300 {  // Cache valid for 5 minutes
             
+            print("⚡️ Using pre-fetched hack (loaded during animation) - INSTANT!")
+            todaysHack = cachedHack
+            hasMarkedComplete = cachedHack.isCompleted ?? false
+            
+            // Use cached meter data for progress
+            if let cachedMeter = meterManager.meterData {
+                todaysProgress = cachedMeter.progress
+            }
+            
+            return
+        }
+        
+        // ❌ Cache miss: Fetch from backend (shouldn't happen if pre-fetch worked)
+        print("⚠️ Cache miss - fetching hack from backend (pre-fetch may have failed)")
+        
+        do {
             struct HackRequest: Encodable {
                 let userId: String
             }
@@ -66,8 +86,7 @@ class DailyHackViewModel: ObservableObject {
             
             hasMarkedComplete = response.isCompleted ?? false
             
-            print("✅ Hack loaded instantly!")
-            print("🎵 Audio URLs:", response.audioUrls ?? [])
+            print("✅ Hack loaded from backend")
             
             // Get today's progress for display
             let meterResponse: MeterResponse = try await supabase.client.functions.invoke(
@@ -107,6 +126,13 @@ class DailyHackViewModel: ObservableObject {
             print("✅ Daily task marked complete!")
             
             hasMarkedComplete = true
+            
+            // ✅ NEW: Save completion date for check-in logic
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            let todayString = formatter.string(from: Date())
+            UserDefaults.standard.set(todayString, forKey: "lastHackCompletionDate")
+            print("✅ Saved completion date: \(todayString)")
             
             // Step 2: Call calculate-meter to update rewire progress
             struct MeterRequest: Encodable {

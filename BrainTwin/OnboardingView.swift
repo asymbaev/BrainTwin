@@ -7,6 +7,7 @@ struct OnboardingView: View {
     @Binding var isOnboardingComplete: Bool
     @State private var showProfileSetup = false
     @State private var setupComplete = false
+    @State private var isProcessingPurchase = false  // ✅ NEW: Show loading after purchase
     
     @AppStorage("appearanceMode") private var appearanceMode = "system"
     
@@ -113,11 +114,43 @@ struct OnboardingView: View {
 
         }
         .preferredColorScheme(preferredColorScheme)
+        .overlay {
+            // ✅ NEW: Show loading overlay immediately after purchase
+            if isProcessingPurchase {
+                ZStack {
+                    Color.appBackground.ignoresSafeArea()
+                    
+                    VStack(spacing: 24) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.appAccent)
+                        
+                        Text("Setting up your account...")
+                            .font(.headline)
+                            .foregroundColor(.appTextPrimary)
+                        
+                        Text("This will only take a moment")
+                            .font(.subheadline)
+                            .foregroundColor(.appTextSecondary)
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .purchaseCompleted)) { _ in
-            // Purchase completed! Check subscription and complete onboarding
+            // Purchase completed! Show loading immediately, then process
             print("🎉 Purchase notification received!")
+            
+            // ✅ IMMEDIATELY show loading state (no delay)
+            withAnimation(.easeInOut(duration: 0.3)) {
+                isProcessingPurchase = true
+            }
+            
+            // Process in background
             Task {
                 await checkIfUserSubscribed()
+                
+                // Loading will disappear when ContentView shows ThankYouView
             }
         }
     }

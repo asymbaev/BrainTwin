@@ -5,18 +5,43 @@ struct ContentView: View {
     @StateObject private var supabase = SupabaseManager.shared
 
     @AppStorage("hasSeenIntro_v2") private var hasSeenIntro = false
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false  // ✅ FIXED: Now uses @AppStorage
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage("hasSeenThankYou") private var hasSeenThankYou = false  // ✅ NEW: Track thank you screen
     
-//    @State private var isCheckingOnboarding = false
-//    @State private var showAnimation = true
     @State private var showAnimation = true
+    @State private var isCheckingReceipt = true  // ✅ NEW: Wait for receipt check
 
 
     var body: some View {
         Group {
-            if supabase.isInitializing {
+            if supabase.isInitializing || isCheckingReceipt {
+                // ✅ Show loading while initializing OR checking receipt
                 loadingView
 
+            } else if supabase.isSignedIn && hasCompletedOnboarding {
+                // ✅ PRIORITY CHECK: User is signed in and has completed onboarding
+                
+                // Check if this is a NEW user who just completed onboarding
+                let justCompleted = UserDefaults.standard.bool(forKey: "justCompletedOnboarding")
+                
+                if justCompleted && !hasSeenThankYou {
+                    // 🎉 NEW USER: Show Thank You screen after purchase
+                    ThankYouView {
+                        hasSeenThankYou = true
+                        UserDefaults.standard.set(false, forKey: "justCompletedOnboarding")
+                    }
+                    .transition(.opacity)
+                    
+                } else if showAnimation {
+                    // RETURNING USER: Show animation, then MainTabView
+                    NeuralNetworkAnimationView {
+                        showAnimation = false
+                    }
+                } else {
+                    // Show main app
+                    MainTabView()
+                }
+                
             } else if showAnimation {
                 NeuralNetworkAnimationView {
                     showAnimation = false
@@ -32,8 +57,8 @@ struct ContentView: View {
                 OnboardingView(isOnboardingComplete: $hasCompletedOnboarding)
 
             } else if !supabase.isSignedIn {
-                // 🔄 Onboarding done but not signed in
-                // Auto-restore should handle this, but show onboarding again as fallback
+                // 🔄 This should NEVER happen now (receipt auto-restore should handle it)
+                // But keep as safety fallback
                 OnboardingView(isOnboardingComplete: $hasCompletedOnboarding)
 
             } else {
@@ -41,31 +66,62 @@ struct ContentView: View {
                 MainTabView()
             }
         }
+        .task {
+            // ✅ CRITICAL: Check receipt BEFORE showing any screens
+            await performReceiptCheck()
+        }
         // 🧪 DEBUG: Shake device to reset (remove before production)
         .onShake {
             print("🧪 DEBUG: Resetting app state...")
             UserDefaults.standard.removeObject(forKey: "hasSeenIntro_v2")
             UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
             UserDefaults.standard.removeObject(forKey: "justCompletedOnboarding")
+            UserDefaults.standard.removeObject(forKey: "hasSeenThankYou")
             UserDefaults.standard.removeObject(forKey: "pendingOnboardingData")
+            UserDefaults.standard.removeObject(forKey: "lastCheckInDate")
+            UserDefaults.standard.removeObject(forKey: "lastHackCompletionDate")
             exit(0)
         }
     }
-
-//        .task {
-//            // ✅ Check onboarding status when signed in
-//            if supabase.isSignedIn {
-//                await handleSignedIn()
-//            }
-//        }
-//        .onChange(of: supabase.isSignedIn) { signedIn in
-//            if signedIn {
-//                Task { await handleSignedIn() }
-//            } else {
-//                // User signed out - reset onboarding status
-//                hasCompletedOnboarding = false
-//            }
-//        }
+    
+    // ✅ CRITICAL: Perform receipt check on EVERY app launch
+    // This handles both force-quit/reopen AND delete/reinstall scenarios
+    private func performReceiptCheck() async {
+        print("🔍 Checking for existing receipt on app launch...")
+        print("   Current state: hasCompletedOnboarding=\(hasCompletedOnboarding), isSignedIn=\(supabase.isSignedIn)")
+        
+        // ✅ ALWAYS check for receipt (even on fresh install)
+        // User might have deleted/reinstalled app but still has valid receipt
+        await SubscriptionManager.shared.autoIdentifyFromReceiptIfNeeded()
+        
+        // ✅ NEW: Pre-fetch data for returning users (during animation time)
+        // This eliminates loading states when MainTabView appears
+        if supabase.isSignedIn && hasCompletedOnboarding {
+            print("🚀 User is returning - pre-fetching data during animation...")
+            await prefetchDataForReturningUser()
+        }
+        
+        // Small delay to ensure state updates propagate
+        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        
+        print("✅ Receipt check complete")
+        print("   Final state: isSignedIn=\(supabase.isSignedIn), hasCompletedOnboarding=\(hasCompletedOnboarding)")
+        
+        isCheckingReceipt = false
+    }
+    
+    // ✅ NEW: Pre-fetch data while animation plays (parallel loading)
+    // This is what Instagram, TikTok, Spotify do - load during transitions!
+    private func prefetchDataForReturningUser() async {
+        print("📦 [Pre-fetch] Starting parallel data loading during animation...")
+        
+        // MeterDataManager now fetches BOTH meter data AND complete hack data in parallel
+        // This single call loads everything we need for the dashboard
+        await MeterDataManager.shared.fetchMeterData(force: false)
+        
+        print("🎉 [Pre-fetch] All data pre-loaded! MainTabView will render instantly.")
+        print("   ✓ Meter data: \(MeterDataManager.shared.meterData != nil ? "ready" : "failed")")
+        print("   ✓ Today's hack: \(MeterDataManager.shared.todaysHack != nil ? "ready" : "failed")")
     }
     
     private var loadingView: some View {
@@ -75,20 +131,7 @@ struct ContentView: View {
                 .tint(.appAccent)
         }
     }
-
-
-//    private func handleSignedIn() async {
-//        print("🔄 Checking onboarding status from database...")
-//        isCheckingOnboarding = true
-//
-//        let completedInDB = await supabase.hasCompletedOnboarding()
-//
-//        // ✅ Sync local storage with database
-//        hasCompletedOnboarding = completedInDB
-//
-//        print("✅ Onboarding status: \(completedInDB)")
-//        isCheckingOnboarding = false
-//    }
+}
 
 
 // MARK: - Shake Gesture (Debug Only)

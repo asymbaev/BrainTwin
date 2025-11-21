@@ -60,9 +60,16 @@ struct DashboardView: View {
             .navigationBarTitleDisplayMode(.inline)
             .preferredColorScheme(preferredColorScheme) // Apply user preference
             .task {
+                // ✅ Data should already be pre-fetched during animation!
+                // These calls will use cached data (instant, no network call)
                 if meterDataManager.meterData == nil {
+                    print("⚠️ Cache miss: Meter data not found (pre-fetch may have failed)")
                     await meterDataManager.fetchMeterData()
+                } else {
+                    print("⚡️ Using pre-fetched meter data - INSTANT!")
                 }
+                
+                // This will use cached hack data if available (see DailyHackViewModel)
                 await hackViewModel.loadTodaysHack()
             }
             .refreshable {
@@ -245,7 +252,7 @@ struct DashboardView: View {
                     .shadow(color: Color.appAccent.opacity(0.6), radius: 4)
             }
 
-            Text("YOUR BRAIN HACK • 1 MIN")
+            Text("TODAY'S BRAIN HACK • 1 MIN")
                 .font(.caption.bold())
                 .foregroundColor(.white)
 

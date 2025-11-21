@@ -30,10 +30,10 @@ class SubscriptionManager: ObservableObject {
     private let productIds = ["braintwin_weekly_299", "braintwin_monthly_999", "braintwin_yearly_2999"]
     
     private init() {
+        // Note: Auto-identify is now called from ContentView.performReceiptCheck()
+        // to ensure proper timing and state updates
         Task {
             await checkSubscriptionStatus()
-            // ✅ NEW: Auto-identify with no restrictions
-            await autoIdentifyFromReceiptIfNeeded()
         }
     }
     
@@ -100,7 +100,7 @@ class SubscriptionManager: ObservableObject {
     /// Identifies or creates user from receipt after purchase
     /// Works for BOTH first-time AND returning users automatically
     func identifyUserFromReceiptAfterPurchase() async throws {
-        print("📱 Identifying user from receipt...")
+        print("📱 Identifying user from receipt after purchase...")
         
         // Get pending onboarding data (may be nil for returning users)
         let onboardingData = getPendingOnboardingData()
@@ -134,20 +134,24 @@ class SubscriptionManager: ObservableObject {
     
     /// Automatically identifies user from receipt on app launch
     /// No restrictions - works for ALL users with valid receipts
+    /// ✅ CRITICAL: This should be called from ContentView to ensure proper timing
     func autoIdentifyFromReceiptIfNeeded() async {
+        print("🔍 [AutoIdentify] Starting auto-identify check...")
+        
         // Skip if already signed in
-        guard !SupabaseManager.shared.isSignedIn else {
-            print("✅ User already signed in, no auto-identify needed")
+        if SupabaseManager.shared.isSignedIn {
+            print("✅ [AutoIdentify] User already signed in, no auto-identify needed")
+            print("   User ID: \(SupabaseManager.shared.userId ?? "nil")")
             return
         }
         
         // Check if there's a valid subscription receipt
         guard let originalTransactionId = try? await getCurrentOriginalTransactionId() else {
-            print("ℹ️ No subscription receipt found - user is new")
+            print("ℹ️ [AutoIdentify] No subscription receipt found - user is new")
             return
         }
         
-        print("🔄 Found subscription receipt, auto-identifying user...")
+        print("🔄 [AutoIdentify] Found subscription receipt, auto-identifying user...")
         print("   Receipt ID: \(originalTransactionId)")
         
         do {
@@ -157,18 +161,27 @@ class SubscriptionManager: ObservableObject {
                 onboardingData: nil
             )
             
+            // Refresh subscription status
             await checkSubscriptionStatus()
             
             if result.isNewUser {
-                print("✅ Auto-identify: New user created! User ID: \(result.userId)")
+                print("✅ [AutoIdentify] New user created! User ID: \(result.userId)")
             } else {
-                print("✅ Auto-identify: Returning user restored! User ID: \(result.userId)")
+                print("✅ [AutoIdentify] Returning user restored! User ID: \(result.userId)")
                 
-                // Mark onboarding as complete for returning users
+                // ✅ CRITICAL: Mark onboarding as complete for returning users
                 UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                print("   ✓ hasCompletedOnboarding set to TRUE")
             }
+            
+            // Verify final state
+            print("📊 [AutoIdentify] Final state:")
+            print("   isSignedIn: \(SupabaseManager.shared.isSignedIn)")
+            print("   userId: \(SupabaseManager.shared.userId ?? "nil")")
+            print("   isSubscribed: \(isSubscribed)")
+            
         } catch {
-            print("⚠️ Auto-identify failed: \(error.localizedDescription)")
+            print("❌ [AutoIdentify] Failed: \(error.localizedDescription)")
             // Silent failure - user can continue as new user
         }
     }
