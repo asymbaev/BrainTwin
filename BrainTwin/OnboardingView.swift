@@ -46,6 +46,10 @@ struct OnboardingView: View {
     private let quoteTypingDelay: TimeInterval = 0.065    // slightly faster
     private let valueTypingDelay: TimeInterval = 0.08     // medium speed
 
+    // MARK: - NeuroMeter State (for mood slider)
+    @State private var moodLevel: Double = 0.5  // 0.0 to 1.0
+    @State private var hasInteractedWithSlider = false
+    @State private var showContinuePulse = false
 
     
     private let fullWelcomeText = "Welcome"
@@ -97,12 +101,12 @@ struct OnboardingView: View {
                 TabView(selection: $viewModel.currentStep) {
                     screen0_WelcomeIntro.tag(0)
                     screen0_5_ValueProp.tag(1)         // Value proposition
-                    screen0_75_MoodCheck.tag(2)        // NEW: Mood check
-                    screen1_NameCollection.tag(3)      
-                    screen1_AgeCollection.tag(4)       
-                    screen2_GoalSelection.tag(5)       
-                    screen3_StruggleSelection.tag(6)   
-                    screen4_TimeSelection.tag(7)       
+                    screen0_75_MoodCheck.tag(2)        // NEW: Mood check (NeuroMeter Slider)
+                    screen1_NameCollection.tag(3)
+                    screen1_AgeCollection.tag(4)
+                    screen2_GoalSelection.tag(5)
+                    screen3_StruggleSelection.tag(6)
+                    screen4_TimeSelection.tag(7)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             }
@@ -585,7 +589,7 @@ struct OnboardingView: View {
         }
     }
     
-    // MARK: - Screen 0.75: Mood Check (NEW)
+    // MARK: - Screen 0.75: Mood Check (NeuroMeter Slider)
     
     private var screen0_75_MoodCheck: some View {
         VStack(spacing: 0) {
@@ -608,63 +612,205 @@ struct OnboardingView: View {
             .padding(.top, 8)
             .padding(.bottom, 24)
             
-            // Scrollable content
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Header
-                    VStack(spacing: 12) {
-                        Text("How's your mental state right now?")
-                            .font(.title2.bold())
-                            .foregroundColor(.appTextPrimary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-                        
-                        Text("We'll tailor your first hack to match")
-                            .font(.subheadline)
-                            .foregroundColor(.appTextSecondary)
-                    }
-                    .padding(.top, 8)
+            Spacer()
+            
+            VStack(spacing: 32) {
+                // Header
+                VStack(spacing: 12) {
+                    Text("How's your mental state right now?")
+                        .font(.title2.bold())
+                        .foregroundColor(.appTextPrimary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
                     
-                    // Mood Grid - 2 columns
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
-                        MoodCard(emoji: "😫", label: "Overwhelmed", mood: "overwhelmed", selectedMood: $viewModel.selectedMood, action: { viewModel.selectMood("overwhelmed") })
-                        MoodCard(emoji: "😰", label: "Anxious", mood: "anxious", selectedMood: $viewModel.selectedMood, action: { viewModel.selectMood("anxious") })
-                        MoodCard(emoji: "😞", label: "Low energy", mood: "low_energy", selectedMood: $viewModel.selectedMood, action: { viewModel.selectMood("low_energy") })
-                        MoodCard(emoji: "😐", label: "Neutral", mood: "neutral", selectedMood: $viewModel.selectedMood, action: { viewModel.selectMood("neutral") })
-                        MoodCard(emoji: "🙂", label: "Calm", mood: "calm", selectedMood: $viewModel.selectedMood, action: { viewModel.selectMood("calm") })
-                        MoodCard(emoji: "😊", label: "Good", mood: "good", selectedMood: $viewModel.selectedMood, action: { viewModel.selectMood("good") })
-                        MoodCard(emoji: "🔥", label: "Motivated", mood: "motivated", selectedMood: $viewModel.selectedMood, action: { viewModel.selectMood("motivated") })
-                        MoodCard(emoji: "✨", label: "Inspired", mood: "inspired", selectedMood: $viewModel.selectedMood, action: { viewModel.selectMood("inspired") })
-                    }
-                    .padding(.horizontal, 24)
+                    Text("Drag the slider to match your energy")
+                        .font(.subheadline)
+                        .foregroundColor(.appTextSecondary)
                 }
-                .padding(.bottom, 100) // Space for button
+                
+                Spacer()
+                    .frame(height: 20)
+                
+                // Lightning Icon - Animated based on mood level
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 72))
+                    .foregroundColor(.appAccent)
+                    .shadow(
+                        color: .appAccent.opacity(moodLevel * 0.6),
+                        radius: 16 + (moodLevel * 24),
+                        x: 0,
+                        y: 0
+                    )
+                    .scaleEffect(0.9 + (moodLevel * 0.15))
+                    .animation(.spring(response: 0.4, dampingFraction: 0.85), value: moodLevel)
+                
+                // Mood Label - Shows current mood text
+                Text(currentMoodLabel)
+                    .font(.title3.weight(.semibold))
+                    .foregroundColor(.appTextPrimary)
+                    .animation(.easeOut(duration: 0.2), value: currentMoodLabel)
+                    .frame(height: 32)
+                
+                Spacer()
+                    .frame(height: 40)
+                
+                // NeuroMeter Slider
+                VStack(spacing: 16) {
+                    // Custom Slider Track
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            // Background track
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(height: 12)
+                            
+                            // Active track (yellow fill)
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.appAccent.opacity(0.8),
+                                            Color.appAccent
+                                        ],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: geometry.size.width * moodLevel, height: 12)
+                            
+                            // Slider thumb
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 32, height: 32)
+                                .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                                .offset(x: (geometry.size.width - 32) * moodLevel)
+                                .gesture(
+                                    DragGesture(minimumDistance: 0)
+                                        .onChanged { value in
+                                            // Calculate new mood level based on drag position
+                                            let newLevel = min(max(0, value.location.x / geometry.size.width), 1)
+                                            moodLevel = newLevel
+                                            
+                                            // Mark as interacted on first drag
+                                            if !hasInteractedWithSlider {
+                                                hasInteractedWithSlider = true
+                                                
+                                                // Pulse animation for continue button
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                                                        showContinuePulse = true
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Update ViewModel's selectedMood based on slider position
+                                            viewModel.selectMood(currentMoodValue)
+                                            
+                                            // Haptic feedback
+                                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                        }
+                                )
+                        }
+                        .frame(height: 32)
+                    }
+                    .frame(height: 32)
+                    .padding(.horizontal, 40)
+                    
+                    // Slider labels
+                    HStack {
+                        Text("Low Energy")
+                            .font(.caption)
+                            .foregroundColor(.appTextTertiary)
+                        
+                        Spacer()
+                        
+                        Text("High Energy")
+                            .font(.caption)
+                            .foregroundColor(.appTextTertiary)
+                    }
+                    .padding(.horizontal, 40)
+                }
             }
             
-            // Continue Button - Fixed at bottom
+            Spacer()
+            
+            // Continue Button
             Button("Continue") {
                 withAnimation {
                     viewModel.currentStep = 3
                 }
             }
             .buttonStyle(OnboardingButtonStyle())
-            .disabled(!viewModel.isMoodValid)
-            .opacity(viewModel.isMoodValid ? 1 : 0.5)
+            .disabled(!hasInteractedWithSlider)
+            .opacity(hasInteractedWithSlider ? 1 : 0.5)
+            .scaleEffect(showContinuePulse ? 1.05 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showContinuePulse)
             .padding(.horizontal, 24)
             .padding(.bottom, 40)
-            .background(
-                // Gradient to fade content behind button
-                LinearGradient(
-                    colors: [
-                        Color.appBackground.opacity(0),
-                        Color.appBackground
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 120)
-                .offset(y: -80)
-            )
+            .onAppear {
+                // Reset pulse after animation completes
+                if showContinuePulse {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        withAnimation {
+                            showContinuePulse = false
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear {
+            // Initialize slider to middle position on first appear
+            if !hasInteractedWithSlider {
+                moodLevel = 0.5
+            }
+        }
+    }
+    
+    // MARK: - NeuroMeter Mood Mapping
+    
+    /// Maps slider position (0.0-1.0) to mood label text
+    /// Adjust these thresholds to fine-tune the mood ranges
+    private var currentMoodLabel: String {
+        switch moodLevel {
+        case 0.0..<0.125:
+            return "Overwhelmed"
+        case 0.125..<0.25:
+            return "Anxious"
+        case 0.25..<0.375:
+            return "Low energy"
+        case 0.375..<0.5:
+            return "Neutral"
+        case 0.5..<0.625:
+            return "Calm"
+        case 0.625..<0.75:
+            return "Good"
+        case 0.75..<0.875:
+            return "Motivated"
+        default: // 0.875...1.0
+            return "Inspired"
+        }
+    }
+    
+    /// Maps slider position to the mood value used by ViewModel
+    /// These match the internal mood identifiers in your existing system
+    private var currentMoodValue: String {
+        switch moodLevel {
+        case 0.0..<0.125:
+            return "overwhelmed"
+        case 0.125..<0.25:
+            return "anxious"
+        case 0.25..<0.375:
+            return "low_energy"
+        case 0.375..<0.5:
+            return "neutral"
+        case 0.5..<0.625:
+            return "calm"
+        case 0.625..<0.75:
+            return "good"
+        case 0.75..<0.875:
+            return "motivated"
+        default: // 0.875...1.0
+            return "inspired"
         }
     }
     
@@ -1347,49 +1493,7 @@ struct OnboardingButtonStyle: ButtonStyle {
     }
 }
 
-struct MoodCard: View {
-    let emoji: String
-    let label: String
-    let mood: String
-    @Binding var selectedMood: String
-    let action: () -> Void
-    
-    var isSelected: Bool {
-        selectedMood == mood
-    }
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 10) {
-                Text(emoji)
-                    .font(.system(size: 44))
-                    .scaleEffect(isSelected ? 1.1 : 1.0)
-                
-                Text(label)
-                    .font(.system(size: 15, weight: isSelected ? .semibold : .regular))
-                    .foregroundColor(.appTextPrimary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 110)
-            .background(Color.appCardBackground)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(
-                        isSelected ? Color.appAccent : Color.appCardBorder,
-                        lineWidth: isSelected ? 2.5 : 1
-                    )
-            )
-            .cornerRadius(16)
-            .shadow(color: isSelected ? Color.appAccent.opacity(0.2) : .clear, radius: 8, x: 0, y: 4)
-            .scaleEffect(isSelected ? 1.02 : 1.0)
-        }
-        .buttonStyle(PlainButtonStyle())
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
-    }
-}
+// NOTE: MoodCard component removed - no longer needed with slider design
 
 extension View {
     func placeholder<Content: View>(
