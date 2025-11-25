@@ -5,6 +5,7 @@ import Foundation
 struct OnboardingData: Codable {
     let name: String
     let age: Int
+    let mood: String?
     let goal: String
     let struggle: String
     let preferredTime: String
@@ -12,6 +13,7 @@ struct OnboardingData: Codable {
     enum CodingKeys: String, CodingKey {
         case name
         case age
+        case mood
         case goal
         case struggle
         case preferredTime = "preferred_time"

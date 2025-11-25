@@ -13,6 +13,9 @@ class OnboardingViewModel: ObservableObject {
     // Screen 1: Age Collection (NEW)
     @Published var userAge: String = ""
     
+    // Screen 1.5: Mood Selection (NEW)
+    @Published var selectedMood: String = ""
+    
     // Screen 2: Goal Selection (was Screen 0)
     @Published var selectedGoal: String = ""
     @Published var customGoalText: String = ""
@@ -46,6 +49,16 @@ class OnboardingViewModel: ObservableObject {
     
     var ageInt: Int? {
         Int(userAge)
+    }
+    
+    // MARK: - Screen 1.5: Mood Selection Logic
+    
+    func selectMood(_ mood: String) {
+        selectedMood = mood
+    }
+    
+    var isMoodValid: Bool {
+        !selectedMood.isEmpty
     }
     
     // MARK: - Screen 2: Goal Selection Logic
@@ -214,6 +227,7 @@ class OnboardingViewModel: ObservableObject {
     private func saveAllOnboardingData() async {
         let name = userName.trimmingCharacters(in: .whitespacesAndNewlines)
         let age = ageInt ?? 0
+        let mood = selectedMood.isEmpty ? nil : selectedMood
         let goal = finalGoalText
         let struggle = finalStruggleText
         let time = selectedTime
@@ -221,6 +235,7 @@ class OnboardingViewModel: ObservableObject {
         let onboardingData = OnboardingData(
             name: name,
             age: age,
+            mood: mood,
             goal: goal,
             struggle: struggle,
             preferredTime: time
