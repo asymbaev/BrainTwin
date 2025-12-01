@@ -37,13 +37,40 @@ struct DashboardView: View {
                 darkModeDepthGradient
 
                 ScrollView {
-                    VStack(spacing: 30) {
-                        Text("Brain level")
-                            .font(.title2.bold())
-                            .foregroundColor(.appTextPrimary)
-                            .padding(.top, 20)
-
-                        meterSection
+                    VStack(spacing: 6) {
+                        // Gradient Card Container for Meter Section
+                        ZStack {
+                            // Vibrant gradient background
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.0, green: 0.8, blue: 0.9),   // Cyan
+                                    Color(red: 0.4, green: 0.6, blue: 1.0),   // Blue
+                                    Color(red: 0.8, green: 0.4, blue: 1.0),   // Purple
+                                    Color(red: 1.0, green: 0.5, blue: 0.8),   // Pink
+                                    Color(red: 1.0, green: 0.7, blue: 0.5)    // Peach/Orange
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            
+                            // Glassmorphism overlay
+                            Color.white.opacity(0.15)
+                            
+                            // Content
+                            VStack(spacing: 6) {
+                                Text("Rewire Progress")
+                                    .font(.title3.bold())
+                                    .foregroundColor(.white)
+                                    .padding(.top, 12)
+                                
+                                meterSection
+                                    .padding(.bottom, 8)
+                            }
+                        }
+                        .cornerRadius(24)
+                        .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 10)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
 
                         streakCalendarView
                             .padding(.horizontal)
@@ -53,7 +80,7 @@ struct DashboardView: View {
 
                         errorSection
                     }
-                    .padding(.bottom, 100)
+                    .padding(.bottom, 120)
                 }
             }
             .navigationTitle("")
@@ -327,7 +354,7 @@ struct DashboardView: View {
             .foregroundColor(colorScheme == .dark ? .black : .white)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
-            .background(Color.appAccent)
+            .background(Color.appAccentGradient)
             .cornerRadius(12)
             .shadow(color: Color.appAccent.opacity(0.3), radius: 8)
         }
@@ -365,39 +392,78 @@ struct DashboardView: View {
             .cornerRadius(6)
     }
 
-    // MARK: - Circular Progress
+    // MARK: - Lightning Emoji Progress Meter
     private func circularProgressView(data: MeterResponse) -> some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 2) {
             ZStack {
-                // Background track
-                Circle()
-                    .trim(from: 0, to: 0.75)
-                    .stroke(Color.appProgressTrack, lineWidth: 20)
-                    .frame(width: 200, height: 200)
-                    .rotationEffect(.degrees(135))
-
-                // Progress arc
-                Circle()
-                    .trim(from: 0, to: (data.progress / 100) * 0.75)
-                    .stroke(
-                        Color.appAccent,
-                        style: StrokeStyle(lineWidth: 20, lineCap: .round)
-                    )
-                    .frame(width: 200, height: 200)
-                    .rotationEffect(.degrees(135))
-                    .shadow(color: progressGlowColor, radius: 10)
+                // Gray base lightning (always visible)
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 85, weight: .bold))
+                    .foregroundColor(Color.appProgressTrack)
+                
+                // Calculate eased progress for better visual representation
+                // Uses gentle power curve (0.7) to make fill more visible without over-amplifying
+                let normalizedProgress = data.progress / 100.0
+                let easedProgress = pow(normalizedProgress, 0.7) * 100.0
+                
+                // Gradient-filled lightning (masked by eased progress)
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 85, weight: .bold))
+                    .foregroundStyle(Color.appAccentGradient)
                     .shadow(color: progressGlowColor, radius: 20)
+                    .shadow(color: progressGlowColor, radius: 30)
+                    .mask(
+                        GeometryReader { geometry in
+                            VStack(spacing: 0) {
+                                Spacer(minLength: 0)
+                                Rectangle()
+                                    .fill(Color.white)
+                                    .frame(
+                                        width: geometry.size.width,
+                                        height: geometry.size.height * (easedProgress / 100)
+                                    )
+                            }
+                        }
+                    )
                     .animation(.easeInOut(duration: 1.0), value: data.progress)
-
-                VStack(spacing: 4) {
-                    Text("\(Int(data.progress))%")
-                        .font(.system(size: 48, weight: .bold))
-                        .foregroundColor(.appTextPrimary)
-
-                    Text("Rewired")
-                        .font(.subheadline)
-                        .foregroundColor(.appTextSecondary)
+                
+                // Outer glow layers
+                ForEach(0..<2, id: \.self) { index in
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 85, weight: .bold))
+                        .foregroundStyle(Color.appAccentGradient)
+                        .opacity(0.15 * (easedProgress / 100))
+                        .blur(radius: 15 + (CGFloat(index) * 10))
+                        .mask(
+                            GeometryReader { geometry in
+                                VStack(spacing: 0) {
+                                    Spacer(minLength: 0)
+                                    Rectangle()
+                                        .fill(Color.white)
+                                        .frame(
+                                            width: geometry.size.width,
+                                            height: geometry.size.height * (easedProgress / 100)
+                                        )
+                                }
+                            }
+                        )
+                        .animation(.easeInOut(duration: 1.0), value: data.progress)
                 }
+            }
+            .frame(width: 180, height: 180)
+            .scaleEffect(0.85 + (data.progress / 100) * 0.15)
+            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: data.progress)
+            
+            // Progress percentage and label below
+            VStack(spacing: 2) {
+                Text("\(Int(data.progress))%")
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundColor(.white)
+                
+                Text("Rewired")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.9))
+                    .tracking(-0.5)
             }
         }
     }
@@ -453,7 +519,7 @@ struct DashboardView: View {
                     .frame(width: 44, height: 44)
                     .overlay(
                         Circle().stroke(
-                            dayData.isCompleted ? Color.appAccent : Color.appCardBorder,
+                            dayData.isCompleted ? Color.appAccentGradient : LinearGradient(colors: [Color.appCardBorder], startPoint: .leading, endPoint: .trailing),
                             lineWidth: dayData.isCompleted ? 2.5 : 1.5
                         )
                     )

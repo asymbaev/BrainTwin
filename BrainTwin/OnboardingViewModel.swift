@@ -80,11 +80,11 @@ class OnboardingViewModel: ObservableObject {
         if selectedGoal.isEmpty {
             return false
         }
-        
+
         if selectedGoal == "custom" {
-            return customGoalText.count >= 10
+            return customGoalText.count >= 5
         }
-        
+
         return true
     }
     
@@ -115,11 +115,11 @@ class OnboardingViewModel: ObservableObject {
         if selectedStruggle.isEmpty {
             return false
         }
-        
+
         if selectedStruggle == "other" {
-            return customStruggleText.count >= 10
+            return customStruggleText.count >= 5
         }
-        
+
         return true
     }
     

@@ -8,13 +8,15 @@ struct ThankYouView: View {
     @State private var progress: Double = 0
     @State private var currentMessage = ""
     @State private var showButton = false
+    @State private var isDashboardReady = false
     @Environment(\.colorScheme) var colorScheme
     @AppStorage("appearanceMode") private var appearanceMode = "system"
 
     private let messages = [
         "Setting up your profile...",
         "Preparing your personalized plan...",
-        "Getting everything ready..."
+        "Getting everything ready...",
+        "Loading your dashboard..."
     ]
 
     // Computed color scheme
@@ -145,11 +147,26 @@ struct ThankYouView: View {
         .onAppear {
             startLoadingAnimation()
 
-            // ✅ PRE-FETCH: Load data during animation so dashboard appears instantly
+            // ✅ PRE-FETCH: Load data during animation and wait until ready
             Task {
-                print("🚀 [ThankYou] Pre-fetching data during animation...")
+                print("🚀 [ThankYou] Pre-fetching dashboard data...")
                 await MeterDataManager.shared.fetchMeterData(force: true)
-                print("✅ [ThankYou] Data ready! Dashboard will load instantly.")
+
+                // Verify data is actually loaded
+                if MeterDataManager.shared.meterData != nil {
+                    print("✅ [ThankYou] Dashboard data confirmed ready!")
+                    await MainActor.run {
+                        isDashboardReady = true
+                    }
+                } else {
+                    print("⚠️ [ThankYou] Dashboard data fetch completed but no data - retrying...")
+                    // Retry once
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    await MeterDataManager.shared.fetchMeterData(force: true)
+                    await MainActor.run {
+                        isDashboardReady = true
+                    }
+                }
             }
         }
     }
@@ -171,9 +188,25 @@ struct ThankYouView: View {
                 // Switch to message 3
                 currentMessage = messages[2]
                 progress += 1
-            } else if progress < 100 {
+            } else if progress < 90 {
                 progress += 1
-            } else {
+            } else if progress < 91 {
+                // Switch to final message while waiting for dashboard
+                currentMessage = messages[3]
+                progress += 1
+            } else if progress < 95 {
+                // Slow down near the end while waiting for data
+                progress += 0.3
+            } else if isDashboardReady && progress < 100 {
+                // Dashboard is ready - finish quickly
+                progress += 2
+            } else if !isDashboardReady {
+                // Dashboard not ready yet - keep progress at 95-99% and wait
+                if progress < 99 {
+                    progress += 0.1
+                }
+            } else if progress >= 100 {
+                // Reached 100% AND dashboard is ready
                 timer.invalidate()
                 // Show success state with button
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {

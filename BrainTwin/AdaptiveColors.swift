@@ -1,7 +1,7 @@
 import SwiftUI
 
-// MARK: - Adaptive Color System
-// Automatically switches between Light and Dark mode based on iOS system appearance
+// MARK: - Light Mode Color System
+// App uses only light mode colors
 
 extension Color {
     // MARK: - Helper for hex colors
@@ -29,15 +29,12 @@ extension Color {
         )
     }
     
-    // MARK: - Adaptive Colors
+    // MARK: - App Colors (Light Mode Only)
     
-    /// Main background - Warm off-white in light, pure black in dark
-    static let appBackground = Color(
-        light: Color(hex: "#FFF8F0"), // Pale peach - warm and energizing
-        dark: Color.black
-    )
+    /// Main background - Warm off-white
+    static let appBackground = Color(hex: "#FFF8F0") // Pale peach - warm and energizing
     
-    /// Primary accent - Gold (from gradient) in BOTH modes
+    /// Primary accent - Gold
     static let appAccent = Color(red: 1.0, green: 0.84, blue: 0.0) // Gold
 
     /// Accent gradient - Orange to Gold (used for buttons, headings, highlights)
@@ -51,58 +48,23 @@ extension Color {
     )
     
     /// Secondary background for cards
-    static let appCardBackground = Color(
-        light: Color.white,
-        dark: Color.white.opacity(0.03)
-    )
+    static let appCardBackground = Color.white
     
     /// Card borders
-    static let appCardBorder = Color(
-        light: Color(hex: "#E8E8E8"),
-        dark: Color.white.opacity(0.08)
-    )
+    static let appCardBorder = Color(hex: "#E8E8E8")
     
     /// Text - Primary
-    static let appTextPrimary = Color(
-        light: Color(hex: "#2B1E14"), // Dark brown (warm, not stark black)
-        dark: Color.white
-    )
+    static let appTextPrimary = Color(hex: "#2B1E14") // Dark brown (warm, not stark black)
     
     /// Text - Secondary
-    static let appTextSecondary = Color(
-        light: Color(hex: "#5A4A3A"), // Medium brown
-        dark: Color.white.opacity(0.7)
-    )
+    static let appTextSecondary = Color(hex: "#5A4A3A") // Medium brown
     
     /// Text - Tertiary
-    static let appTextTertiary = Color(
-        light: Color(hex: "#8A7A6A"), // Light brown
-        dark: Color.white.opacity(0.4)
-    )
+    static let appTextTertiary = Color(hex: "#8A7A6A") // Light brown
     
     /// Progress track (background)
-    static let appProgressTrack = Color(
-        light: Color(hex: "#E8E8E8"),
-        dark: Color.white.opacity(0.08)
-    )
+    static let appProgressTrack = Color(hex: "#E8E8E8")
     
     /// Glass overlay for buttons
-    static let appGlassOverlay = Color(
-        light: Color.black.opacity(0.05),
-        dark: Color.white.opacity(0.1)
-    )
-    
-    // MARK: - Helper initializer for light/dark variants
-    init(light: Color, dark: Color) {
-        self.init(UIColor { traitCollection in
-            switch traitCollection.userInterfaceStyle {
-            case .light:
-                return UIColor(light)
-            case .dark:
-                return UIColor(dark)
-            default:
-                return UIColor(dark)
-            }
-        })
-    }
+    static let appGlassOverlay = Color.black.opacity(0.05)
 }

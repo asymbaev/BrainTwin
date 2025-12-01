@@ -56,6 +56,7 @@ struct ContentView: View {
                 MainTabView()
             }
         }
+        .preferredColorScheme(.light)  // Force light mode for entire app
         .task {
             // ✅ CRITICAL: Check receipt BEFORE showing any screens
             await performReceiptCheck()

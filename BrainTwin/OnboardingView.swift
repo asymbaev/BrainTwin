@@ -6,7 +6,6 @@ struct OnboardingView: View {
     @StateObject private var viewModel = OnboardingViewModel()
     @Binding var isOnboardingComplete: Bool
     @State private var showProfileSetup = false
-    @State private var setupComplete = false
     @State private var isProcessingPurchase = false  // ✅ NEW: Show loading after purchase
     
     @AppStorage("appearanceMode") private var appearanceMode = "system"
@@ -18,13 +17,12 @@ struct OnboardingView: View {
     
     // MARK: - Typewriter config
     private let typewriterCharacterDelay: TimeInterval = 0.065   // slightly slower
-
-
-
-    
-    @Environment(\.colorScheme) var colorScheme
     
     @FocusState private var isAgeFieldFocused: Bool
+    
+    // Bottom sheet states for custom inputs
+    @State private var showCustomGoalSheet = false
+    @State private var showCustomStruggleSheet = false
     
     // MARK: - Typewriter state 👇
     @State private var animatedWelcomeText = ""
@@ -70,19 +68,6 @@ struct OnboardingView: View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
             
-            if colorScheme == .dark {
-                RadialGradient(
-                    colors: [
-                        Color(white: 0.04),
-                        Color.black
-                    ],
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: 500
-                )
-                .ignoresSafeArea()
-            }
-            
             AdaptiveStarfieldView()
                 .ignoresSafeArea()
             
@@ -125,23 +110,15 @@ struct OnboardingView: View {
                     UIScrollView.appearance().isScrollEnabled = true
                 }
             }
-            .fullScreenCover(isPresented: $showProfileSetup) {
-                ProfileSetupAnimationView(isComplete: $setupComplete)
-                    .onChange(of: setupComplete) { done in
-                        if done {
-                            print("🎉 Animation complete! Showing paywall next...")
-                            
-                            // ❌ Do NOT mark onboarding complete here anymore
-                            // isOnboardingComplete stays false until user actually subscribes
-
-                            showProfileSetup = false
-
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                showPaywall()
-                            }
-                        }
+            .onChange(of: showProfileSetup) { newValue in
+                if newValue {
+                    // Directly show paywall when triggered
+                    print("🎉 Showing paywall...")
+                    showProfileSetup = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        showPaywall()
                     }
-                    .interactiveDismissDisabled(true)
+                }
             }
 
         }
@@ -1020,7 +997,8 @@ struct OnboardingView: View {
                 // Custom Goal Option
                 VStack(alignment: .leading, spacing: 8) {
                     Button {
-                        viewModel.selectGoal("custom")
+                        viewModel.selectedGoal = "custom"
+                        showCustomGoalSheet = true
                     } label: {
                         HStack {
                             Text("Other - Set custom goal")
@@ -1049,25 +1027,6 @@ struct OnboardingView: View {
                                 .stroke(viewModel.selectedGoal == "custom" ? Color.appAccentGradient : LinearGradient(colors: [Color.appCardBorder], startPoint: .leading, endPoint: .trailing), lineWidth: viewModel.selectedGoal == "custom" ? 2 : 1)
                         )
                     }
-                    
-                    if viewModel.selectedGoal == "custom" {
-                        TextField("e.g., Build discipline to finish my startup tasks", text: $viewModel.customGoalText, axis: .vertical)
-                            .textFieldStyle(.plain)
-                            .foregroundColor(.appTextPrimary)
-                            .accentColor(.appAccent)
-                            .placeholder(when: viewModel.customGoalText.isEmpty) {
-                                Text("e.g., Build discipline to finish my startup tasks")
-                                    .foregroundColor(.appTextTertiary)
-                            }
-                            .padding()
-                            .background(Color.clear)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.appAccentGradient, lineWidth: 1)
-                            )
-                            .lineLimit(2...4)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
                 }
             }
             .padding(.horizontal)
@@ -1086,6 +1045,13 @@ struct OnboardingView: View {
             .padding(.horizontal, 24)
             .padding(.top, 12)  // ✅ Reduced from 16 to 12
             .padding(.bottom, 40)
+        }
+        .sheet(isPresented: $showCustomGoalSheet) {
+            CustomInputBottomSheet(
+                title: "What's your goal?",
+                placeholder: "e.g., Build discipline to finish my startup tasks",
+                text: $viewModel.customGoalText
+            )
         }
     }
     
@@ -1158,10 +1124,11 @@ struct OnboardingView: View {
                 // Custom Struggle Option
                 VStack(alignment: .leading, spacing: 8) {
                     Button {
-                        viewModel.selectStruggle("other")
+                        viewModel.selectedStruggle = "other"
+                        showCustomStruggleSheet = true
                     } label: {
                         HStack {
-                            Text("Other")
+                            Text("Something else...")
                                 .font(.body)
                                 .foregroundColor(.appTextPrimary)
 
@@ -1187,25 +1154,6 @@ struct OnboardingView: View {
                                 .stroke(viewModel.selectedStruggle == "other" ? Color.appAccentGradient : LinearGradient(colors: [Color.appCardBorder], startPoint: .leading, endPoint: .trailing), lineWidth: viewModel.selectedStruggle == "other" ? 2 : 1)
                         )
                     }
-
-                    if viewModel.selectedStruggle == "other" {
-                        TextField("Describe your biggest challenge...", text: $viewModel.customStruggleText, axis: .vertical)
-                            .textFieldStyle(.plain)
-                            .foregroundColor(.appTextPrimary)
-                            .accentColor(.appAccent)
-                            .placeholder(when: viewModel.customStruggleText.isEmpty) {
-                                Text("Describe your biggest challenge...")
-                                    .foregroundColor(.appTextTertiary)
-                            }
-                            .padding()
-                            .background(Color.clear)  // Transparent background
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.appAccentGradient, lineWidth: 1)
-                            )
-                            .lineLimit(2...4)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
                 }
             }
             .padding(.horizontal)
@@ -1223,6 +1171,13 @@ struct OnboardingView: View {
             .padding(.horizontal, 24)
             .padding(.top, 12)
             .padding(.bottom, 40)
+        }
+        .sheet(isPresented: $showCustomStruggleSheet) {
+            CustomInputBottomSheet(
+                title: "What holds you back?",
+                placeholder: "Describe your biggest challenge...",
+                text: $viewModel.customStruggleText
+            )
         }
     }
 
@@ -1546,13 +1501,12 @@ struct OnboardingView: View {
             Button {
                 Task {
                     await viewModel.completeOnboarding()
-                    setupComplete = false
                     showProfileSetup = true
                 }
             } label: {
                 if viewModel.isLoading {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: colorScheme == .dark ? .black : .white))
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .frame(maxWidth: .infinity)
                 } else {
                     Text("Complete Setup")
@@ -1830,10 +1784,19 @@ func getMetricsForStruggle(_ struggle: String, goal: String) -> StruggleMetrics 
         return StruggleMetrics(
             metric1: "Progress on goals",
             metric2: "Mental wellbeing",
-            metric3: "Daily consistency"
+                metric3: "Daily consistency"
         )
     }
 }
+
+// MARK: - Custom Struggle Text Formatter
+
+/// Returns a generic, safe message for custom struggles to avoid grammar issues
+/// Custom input is unpredictable, so we use a catch-all phrase instead
+func formatCustomStruggleText(_ text: String) -> String {
+    return "face personal challenges like this"
+}
+
 
 func getStruggleStatistic(for struggle: String, customText: String) -> StruggleStatistic {
     switch struggle {
@@ -1844,11 +1807,11 @@ func getStruggleStatistic(for struggle: String, customText: String) -> StruggleS
     case "I take everything too seriously":
         return StruggleStatistic(percentage: 58, struggleText: "take things too seriously")
     case "I have low self-esteem":
-        return StruggleStatistic(percentage: 72, struggleText: "struggle with low self-esteem")
+        return StruggleStatistic(percentage: 85, struggleText: "struggle with low self-esteem")
     case "other":
-        // Use custom text if available
-        let text = customText.isEmpty ? "face similar challenges" : customText.lowercased()
-        return StruggleStatistic(percentage: 70, struggleText: text)
+        // Use generic message for custom struggles
+        let formattedText = formatCustomStruggleText(customText)
+        return StruggleStatistic(percentage: 70, struggleText: formattedText)
     default:
         return StruggleStatistic(percentage: 70, struggleText: "face similar challenges")
     }
@@ -2567,7 +2530,125 @@ struct CommitmentLine: View {
     }
 }
 
-// MARK: - Unlock Cards View (Gamified Solution Screen)
+// ============================================
+// THE ACTUAL FINAL FIX - UnlockableCard
+// ============================================
+// The width constraint must be INSIDE the component,
+// not just on the parent call
+
+struct UnlockableCard: View {
+    let emoji: String
+    let text: String
+    let isUnlocked: Bool
+    let isReady: Bool
+    let onTap: () -> Void
+
+    @State private var flipRotation: Double = 0
+    @State private var cardScale: CGFloat = 1.0
+    @State private var glowOpacity: Double = 0
+
+    // ✅ Card dimensions - WIDTH AND HEIGHT
+    private let cardWidth: CGFloat = 320
+    private let cardHeight: CGFloat = 200
+    private let cardCornerRadius: CGFloat = 20
+
+    var body: some View {
+        ZStack {
+            // Card back - with WIDTH constraint
+            VelvetBackground(
+                baseColor: Color(red: 1.0, green: 0.6, blue: 0.2),
+                cornerRadius: cardCornerRadius
+            )
+            .frame(width: cardWidth, height: cardHeight)  // ✅ EXPLICIT WIDTH
+            .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius))
+            .overlay(
+                VStack(spacing: 12) {
+                    Text(emoji)
+                        .font(.system(size: 48))
+                    
+                    if !isReady {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.white.opacity(0.9))
+                    }
+                }
+            )
+            .shadow(color: Color.black.opacity(0.15), radius: 12, x: 0, y: 4)
+            .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 2)
+            .rotation3DEffect(.degrees(flipRotation), axis: (x: 0, y: 1, z: 0))
+            .opacity(flipRotation < 90 ? 1 : 0)
+
+            // Card front - with WIDTH constraint
+            RoundedRectangle(cornerRadius: cardCornerRadius)
+                .fill(Color.white)
+                .frame(width: cardWidth, height: cardHeight)  // ✅ EXPLICIT WIDTH
+                .overlay(
+                    RoundedRectangle(cornerRadius: cardCornerRadius)
+                        .stroke(Color.appAccentGradient, lineWidth: 2.5)
+                )
+                .overlay(
+                    VStack(spacing: 12) {
+                        Text(emoji)
+                            .font(.system(size: 40))
+
+                        Text(text)
+                            .font(.system(size: 15, weight: .regular))
+                            .foregroundColor(.appTextPrimary)
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(3)
+                            .padding(.horizontal, 24)
+                    }
+                    .padding(.vertical, 20)
+                )
+                .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 4)
+                .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 2)
+                .rotation3DEffect(.degrees(flipRotation - 180), axis: (x: 0, y: 1, z: 0))
+                .opacity(flipRotation >= 90 ? 1 : 0)
+
+            // Glow - with WIDTH constraint
+            RoundedRectangle(cornerRadius: cardCornerRadius)
+                .stroke(Color(red: 1.0, green: 0.84, blue: 0.0), lineWidth: 3)
+                .shadow(color: Color(red: 1.0, green: 0.84, blue: 0.0), radius: 15)
+                .frame(width: cardWidth, height: cardHeight)  // ✅ EXPLICIT WIDTH
+                .opacity(glowOpacity)
+        }
+        .frame(width: cardWidth, height: cardHeight)  // ✅ CONSTRAIN THE ZSTACK TOO
+        .scaleEffect(cardScale)
+        .onTapGesture {
+            if isReady && !isUnlocked {
+                onTap()
+            }
+        }
+        .onChange(of: isUnlocked) { oldValue, newValue in
+            if newValue {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    cardScale = 1.03
+                    glowOpacity = 0.8
+                }
+
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                    flipRotation = 180
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                        cardScale = 1.0
+                    }
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        glowOpacity = 0
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================
+// UnlockCardsView - Simplified parent
+// ============================================
 
 struct UnlockCardsView: View {
     let onNext: () -> Void
@@ -2584,12 +2665,10 @@ struct UnlockCardsView: View {
 
     var body: some View {
         ZStack {
-            // Adaptive background
-            Color.appBackground
-                .ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Header - reassuring message
+                // Header
                 VStack(spacing: 8) {
                     Text("Here's the good news...")
                         .font(.system(size: 32, weight: .bold))
@@ -2601,50 +2680,45 @@ struct UnlockCardsView: View {
                         .foregroundColor(.appTextSecondary)
                         .multilineTextAlignment(.center)
                 }
-                .padding(.bottom, 24) // 24pts between subtitle and first card
+                .padding(.bottom, 24)
 
-                // Card 1
-                UnlockableCard(
-                    emoji: "⚡",
-                    text: "Your personalized daily hack is tailored to rewire your brain patterns",
-                    isUnlocked: isCard1Unlocked,
-                    isReady: true,
-                    onTap: {
-                        unlockCard1()
-                    }
-                )
-                .padding(.bottom, 16) // 16pts between cards
-                .overlay(
-                    ConfettiView(particles: card1Confetti)
-                )
+                // Cards - NO PADDING, cards constrain themselves
+                VStack(spacing: 16) {
+                    // Card 1 - card handles its own width
+                    UnlockableCard(
+                        emoji: "⚡",
+                        text: "Your personalized daily hack is tailored to rewire your brain patterns",
+                        isUnlocked: isCard1Unlocked,
+                        isReady: true,
+                        onTap: { unlockCard1() }
+                    )
+                    .overlay(ConfettiView(particles: card1Confetti))
 
-                // Card 2
-                UnlockableCard(
-                    emoji: "💬",
-                    text: "24/7 AI neuro coach to guide and support your transformation",
-                    isUnlocked: isCard2Unlocked,
-                    isReady: isCard2Ready,
-                    onTap: {
-                        if isCard2Ready {
-                            unlockCard2()
+                    // Card 2 - card handles its own width
+                    UnlockableCard(
+                        emoji: "💬",
+                        text: "24/7 AI neuro coach to guide and support your transformation",
+                        isUnlocked: isCard2Unlocked,
+                        isReady: isCard2Ready,
+                        onTap: {
+                            if isCard2Ready {
+                                unlockCard2()
+                            }
                         }
-                    }
-                )
-                .overlay(
-                    ConfettiView(particles: card2Confetti)
-                )
+                    )
+                    .overlay(ConfettiView(particles: card2Confetti))
+                }
 
-                // Spacer pushes button to bottom
                 Spacer()
 
-                // Next button (enabled after both unlocked)
+                // Next button - matches card width
                 Button {
                     onNext()
                 } label: {
                     Text("Next")
                         .font(.headline)
                         .foregroundColor(bothCardsUnlocked ? .white : Color(red: 0.6, green: 0.6, blue: 0.6))
-                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .frame(width: 320, height: 52)  // ✅ EXPLICIT WIDTH
                         .background(
                             Group {
                                 if bothCardsUnlocked {
@@ -2664,22 +2738,16 @@ struct UnlockCardsView: View {
                 .disabled(!bothCardsUnlocked)
                 .padding(.bottom, 40)
             }
-            .padding(.horizontal, 24)
             .padding(.top, 24)
         }
     }
 
     private func unlockCard1() {
         guard !isCard1Unlocked else { return }
-
         withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
             isCard1Unlocked = true
         }
-
-        // Trigger confetti
         createConfetti(for: .card1)
-
-        // Make card 2 ready after a delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             withAnimation {
                 isCard2Ready = true
@@ -2689,30 +2757,24 @@ struct UnlockCardsView: View {
 
     private func unlockCard2() {
         guard !isCard2Unlocked else { return }
-
         withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
             isCard2Unlocked = true
         }
-
-        // Trigger confetti
         createConfetti(for: .card2)
     }
 
     private func createConfetti(for card: CardType) {
         let confettiCount = 20
         var particles: [ConfettiParticle] = []
-
         for _ in 0..<confettiCount {
             let particle = ConfettiParticle(
-                x: 0,
-                y: 0,
+                x: 0, y: 0,
                 velocityX: Double.random(in: -150...150),
                 velocityY: Double.random(in: -200...(-50)),
                 opacity: 1.0
             )
             particles.append(particle)
         }
-
         if card == .card1 {
             card1Confetti = particles
             animateConfetti(for: .card1)
@@ -2728,11 +2790,9 @@ struct UnlockCardsView: View {
                 for i in 0..<card1Confetti.count {
                     card1Confetti[i].x += card1Confetti[i].velocityX * 0.05
                     card1Confetti[i].y += card1Confetti[i].velocityY * 0.05
-                    card1Confetti[i].velocityY += 500 * 0.05 // gravity
+                    card1Confetti[i].velocityY += 500 * 0.05
                     card1Confetti[i].opacity -= 0.02
                 }
-
-                // Stop when all particles are invisible
                 if card1Confetti.allSatisfy({ $0.opacity <= 0 }) {
                     timer.invalidate()
                 }
@@ -2740,11 +2800,9 @@ struct UnlockCardsView: View {
                 for i in 0..<card2Confetti.count {
                     card2Confetti[i].x += card2Confetti[i].velocityX * 0.05
                     card2Confetti[i].y += card2Confetti[i].velocityY * 0.05
-                    card2Confetti[i].velocityY += 500 * 0.05 // gravity
+                    card2Confetti[i].velocityY += 500 * 0.05
                     card2Confetti[i].opacity -= 0.02
                 }
-
-                // Stop when all particles are invisible
                 if card2Confetti.allSatisfy({ $0.opacity <= 0 }) {
                     timer.invalidate()
                 }
@@ -2757,127 +2815,8 @@ struct UnlockCardsView: View {
     }
 }
 
-// MARK: - Unlockable Card Component
 
-struct UnlockableCard: View {
-    let emoji: String
-    let text: String
-    let isUnlocked: Bool
-    let isReady: Bool
-    let onTap: () -> Void
 
-    @State private var flipRotation: Double = 0
-    @State private var cardScale: CGFloat = 1.0
-    @State private var glowOpacity: Double = 0
-
-    var body: some View {
-        ZStack {
-            // Card back (face down - shown when not unlocked)
-            if flipRotation < 90 {
-                VelvetBackground(
-                    baseColor: Color(red: 1.0, green: 0.6, blue: 0.2),
-                    cornerRadius: 16
-                )
-                .frame(height: 140)
-                .padding(.horizontal, 32)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(
-                    ZStack {
-                        // Clean centered layout for closed card
-                        VStack(spacing: 12) {
-                            Text(emoji)
-                                .font(.system(size: 50))
-                            
-                            if !isReady {
-                                // Lock icon when not ready
-                                Image(systemName: "lock.fill")
-                                    .font(.system(size: 32))
-                                    .foregroundColor(.white.opacity(0.9))
-                            }
-                        }
-                    }
-                )
-                .shadow(color: Color.black.opacity(0.15), radius: 12, x: 0, y: 4)
-                .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 2)
-                .rotation3DEffect(.degrees(flipRotation), axis: (x: 0, y: 1, z: 0))
-            }
-
-            // Card front (face up - shown when unlocked)
-            if flipRotation >= 90 {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.white)
-                    .frame(height: 140)
-                    .padding(.horizontal, 32)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.appAccentGradient, lineWidth: 2.5)
-                    )
-                    .overlay(
-                        VStack(spacing: 8) {
-                            Text(emoji)
-                                .font(.system(size: 40))
-
-                            Text(text)
-                                .font(.system(size: 15, weight: .regular))
-                                .foregroundColor(.appTextPrimary)
-                                .multilineTextAlignment(.center)
-                                .lineSpacing(2)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 18)
-                    )
-                    .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 4)
-                    .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 2)
-                    .rotation3DEffect(.degrees(flipRotation - 180), axis: (x: 0, y: 1, z: 0))
-            }
-
-            // Golden glow effect during unlock
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                    Color(red: 1.0, green: 0.84, blue: 0.0),
-                    lineWidth: 3
-                )
-                .shadow(color: Color(red: 1.0, green: 0.84, blue: 0.0), radius: 15)
-                .frame(height: 140)
-                .padding(.horizontal, 32)
-                .opacity(glowOpacity)
-        }
-        .scaleEffect(cardScale)
-        .onTapGesture {
-            if isReady && !isUnlocked {
-                onTap()
-            }
-        }
-        .onChange(of: isUnlocked) { oldValue, newValue in
-            if newValue {
-                // Trigger card flip animation - smooth and quick
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    cardScale = 1.05
-                    glowOpacity = 1.0
-                }
-
-                withAnimation(.spring(response: 0.7, dampingFraction: 0.75)) {
-                    flipRotation = 180
-                }
-
-                // Scale back down
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                        cardScale = 1.0
-                    }
-                }
-
-                // Remove glow
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        glowOpacity = 0
-                    }
-                }
-            }
-        }
-    }
-}
 
 // MARK: - Confetti Particle
 
@@ -3600,6 +3539,101 @@ struct Star: Identifiable {
     var opacity: Double
     let blur: CGFloat
     let animationDelay: Double
+}
+
+// MARK: - Custom Input Bottom Sheet
+
+struct CustomInputBottomSheet: View {
+    let title: String
+    let placeholder: String
+    @Binding var text: String
+    @Environment(\.dismiss) var dismiss
+    @FocusState private var isTextFieldFocused: Bool
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.appBackground.ignoresSafeArea()
+                
+                VStack(spacing: 24) {
+                    // Icon
+                    Text("✏️")
+                        .font(.system(size: 48))
+                        .padding(.top, 20)
+                    
+                    // Instructions
+                    VStack(spacing: 8) {
+                        Text(title)
+                            .font(.title2.bold())
+                            .foregroundColor(.appTextPrimary)
+                            .multilineTextAlignment(.center)
+                        
+                        Text("Be specific - this helps us personalize your experience")
+                            .font(.subheadline)
+                            .foregroundColor(.appTextSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    
+                    // Text Input
+                    ZStack(alignment: .topLeading) {
+                        if text.isEmpty {
+                            Text(placeholder)
+                                .foregroundColor(.appTextTertiary)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 14)
+                                .allowsHitTesting(false)
+                        }
+                        
+                        TextEditor(text: $text)
+                            .focused($isTextFieldFocused)
+                            .font(.body)
+                            .foregroundColor(.appTextPrimary)
+                            .scrollContentBackground(.hidden)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .frame(minHeight: 120)
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.appCardBackground.opacity(0.5))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.appAccentGradient, lineWidth: 2)
+                    )
+                    .padding(.horizontal, 24)
+                    
+                    Spacer()
+                }
+                .padding(.top, 8)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.appTextSecondary)
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.appAccent)
+                    .fontWeight(.semibold)
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .onAppear {
+            // Auto-focus the text field when sheet appears
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                isTextFieldFocused = true
+            }
+        }
+    }
 }
 
 #Preview {
