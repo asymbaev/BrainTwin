@@ -249,7 +249,7 @@ private struct NodeView: View {
     private var ringColor: Color {
         switch status {
         case .completed: return Color.green.opacity(0.7)
-        case .current:   return Color.yellow.opacity(0.8)
+        case .current:   return Color.appAccent.opacity(0.8)
         case .locked:    return Color.white.opacity(0.35)
         }
     }
@@ -276,7 +276,11 @@ private struct CircularStreakRing: View {
                 .trim(from: 0, to: max(0.02, progress))
                 .stroke(
                     AngularGradient(
-                        gradient: Gradient(colors: [Color.appAccent, Color.yellow, Color.appAccent]),
+                        gradient: Gradient(colors: [
+                            Color(red: 1.0, green: 0.6, blue: 0.2),   // Warm orange
+                            Color(red: 1.0, green: 0.84, blue: 0.0),  // Gold
+                            Color(red: 1.0, green: 0.6, blue: 0.2)    // Warm orange
+                        ]),
                         center: .center
                     ),
                     style: StrokeStyle(lineWidth: 12, lineCap: .round)

@@ -314,7 +314,7 @@ struct DashboardView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
     
-    // Listen Button (Primary - Yellow)
+    // Listen Button (Primary - Gold Accent)
     private var listenButton: some View {
         Button {
             showListenMode = true

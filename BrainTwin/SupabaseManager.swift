@@ -196,6 +196,7 @@ class SupabaseManager: ObservableObject {
             struct OnboardingDataPayload: Encodable {
                 let name: String?
                 let age: Int?
+                let mood: String?
                 let goal: String?
                 let struggle: String?
                 let preferredTime: String?
@@ -221,6 +222,7 @@ class SupabaseManager: ObservableObject {
             ReceiptRequest.OnboardingDataPayload(
                 name: data.name,
                 age: data.age,
+                mood: data.mood,
                 goal: data.goal,
                 struggle: data.struggle,
                 preferredTime: data.preferredTime

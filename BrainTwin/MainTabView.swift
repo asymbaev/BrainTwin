@@ -116,15 +116,15 @@ struct MainTabView: View {
             // ✅ STEP 1: Ensure data is loaded (should be cached from animation)
             print("📱 MainTabView loaded - checking cache...")
             await meterDataManager.fetchMeterData()
-            
+
             // ✅ STEP 2: Determine if check-in should show
             await determineCheckInFlow()
-            
+
             // ✅ STEP 3: Load hack data (will use cache if available)
             Task {
                 await hackViewModel.loadTodaysHack()
             }
-            
+
             // ✅ STEP 4: Fetch completed count for roadmap
             await fetchCompletedCount()
         }
@@ -216,20 +216,20 @@ struct MainTabView: View {
     // Fetch completed count from meter
     private func fetchCompletedCount() async {
         guard let userId = SupabaseManager.shared.userId else { return }
-        
+
         do {
             struct MeterRequest: Encodable {
                 let userId: String
             }
-            
+
             let meterResponse: MeterResponse = try await SupabaseManager.shared.client.functions.invoke(
                 "calculate-meter",
                 options: FunctionInvokeOptions(body: MeterRequest(userId: userId))
             )
-            
+
             completedCount = meterResponse.completedProtocols
             print("✅ Completed count: \(completedCount)")
-            
+
         } catch {
             print("❌ Failed to fetch completed count: \(error)")
         }

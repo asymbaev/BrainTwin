@@ -122,8 +122,8 @@ struct HackIntroView: View {
                     VStack(spacing: 20) {
                         ProgressView()
                             .scaleEffect(1.5)
-                            .tint(.yellow)
-                        
+                            .tint(.appAccent)
+
                         Text("Generating your brain hack...")
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.8))

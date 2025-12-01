@@ -10,9 +10,10 @@ class OnboardingViewModel: ObservableObject {
     // Screen 0: Name Collection (NEW)
     @Published var userName: String = ""
     
-    // Screen 1: Age Collection (NEW)
+    // Screen 1: Age Collection (NEW) - Now using age ranges
     @Published var userAge: String = ""
-    
+    @Published var selectedAgeRange: String = ""
+
     // Screen 1.5: Mood Selection (NEW)
     @Published var selectedMood: String = ""
     
@@ -40,17 +41,21 @@ class OnboardingViewModel: ObservableObject {
         return trimmed.count >= 2 && trimmed.count <= 50
     }
     
-    // MARK: - Screen 1: Age Validation
-    
+    // MARK: - Screen 1: Age Selection Logic
+
+    func selectAgeRange(_ range: String) {
+        selectedAgeRange = range
+    }
+
     var isAgeValid: Bool {
         guard let age = Int(userAge) else { return false }
         return age >= 13 && age <= 120
     }
-    
+
     var ageInt: Int? {
         Int(userAge)
     }
-    
+
     // MARK: - Screen 1.5: Mood Selection Logic
     
     func selectMood(_ mood: String) {
@@ -133,22 +138,19 @@ class OnboardingViewModel: ObservableObject {
     }
     
     // MARK: - Complete Onboarding Flow
-    
+
     func completeOnboarding() async {
         isLoading = true
-        
-        // Step 1: Request notification permission
-        await requestNotificationPermission()
-        
-        // Step 2: Save ALL onboarding data (including name and age)
+
+        // Step 1: Save ALL onboarding data (including name and age)
         await saveAllOnboardingData()
-        
-        // Step 3: Set flag before marking complete
+
+        // Step 2: Set flag before marking complete
         UserDefaults.standard.set(true, forKey: "justCompletedOnboarding")
         print("✅ justCompletedOnboarding flag set to true")
-        
+
         isLoading = false
-        
+
         print("✅ Onboarding flow completed successfully")
     }
     

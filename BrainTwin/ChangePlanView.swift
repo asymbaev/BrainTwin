@@ -83,7 +83,7 @@ struct ChangePlanView: View {
                                     .foregroundColor(.black)
                                     .frame(maxWidth: .infinity)
                                     .padding()
-                                    .background(Color.yellow)
+                                    .background(Color.appAccentGradient)
                                     .cornerRadius(12)
                             }
                             .padding(.horizontal)
@@ -129,7 +129,14 @@ struct PlanCard: View {
                         if let savings = plan.savings {
                             Text(savings)
                                 .font(.caption.bold())
-                                .foregroundColor(.yellow)
+                                .foregroundColor(.white)
+                                .overlay(
+                                    Color.appAccentGradient
+                                        .mask(
+                                            Text(savings)
+                                                .font(.caption.bold())
+                                        )
+                                )
                         }
                     }
                     
@@ -149,10 +156,23 @@ struct PlanCard: View {
                 if isSelected && !isCurrent {
                     HStack {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.yellow)
+                            .foregroundColor(.white)
+                            .overlay(
+                                Color.appAccentGradient
+                                    .mask(
+                                        Image(systemName: "checkmark.circle.fill")
+                                    )
+                            )
                         Text("Selected")
                             .font(.subheadline.bold())
-                            .foregroundColor(.yellow)
+                            .foregroundColor(.white)
+                            .overlay(
+                                Color.appAccentGradient
+                                    .mask(
+                                        Text("Selected")
+                                            .font(.subheadline.bold())
+                                    )
+                            )
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, 8)
@@ -160,13 +180,17 @@ struct PlanCard: View {
             }
             .padding()
             .background(
-                isSelected
-                    ? Color.yellow.opacity(0.2)
-                    : Color.white.opacity(0.1)
+                Group {
+                    if isSelected {
+                        Color.appAccent.opacity(0.2)
+                    } else {
+                        Color.white.opacity(0.1)
+                    }
+                }
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.yellow : Color.clear, lineWidth: 2)
+                    .stroke(isSelected ? Color.appAccent : Color.clear, lineWidth: 2)
             )
             .cornerRadius(12)
         }

@@ -28,24 +28,24 @@ final class MeterDataManager: ObservableObject {
             errorMessage = "No user ID found"
             return
         }
-        
+
         // Don't fetch again if we already have recent data (unless forced)
         if !force, let lastFetch = lastFetchDate, Date().timeIntervalSince(lastFetch) < 60 {
             print("📊 Using cached meter data (fetched \(Int(Date().timeIntervalSince(lastFetch)))s ago)")
             return
         }
-        
+
         isLoading = true
         errorMessage = nil
-        
+
         // Fetch both meter data and complete hack in parallel
         async let meterTask: () = fetchMeter(userId: userId)
         async let hackTask: () = fetchTodaysHack(userId: userId)
-        
+
         // Wait for both
         await meterTask
         await hackTask
-        
+
         lastFetchDate = Date()
         lastHackFetchDate = Date()
         isLoading = false
@@ -58,15 +58,15 @@ final class MeterDataManager: ObservableObject {
             struct MeterRequest: Encodable {
                 let userId: String
             }
-            
+
             let response: MeterResponse = try await supabase.client.functions.invoke(
                 "calculate-meter",
                 options: FunctionInvokeOptions(body: MeterRequest(userId: userId))
             )
-            
+
             meterData = response
             print("✅ Meter data preloaded: \(response.progress)% progress, \(response.streak) day streak")
-            
+
         } catch {
             errorMessage = "Failed to load meter data: \(error.localizedDescription)"
             print("❌ Meter fetch error: \(error)")
@@ -76,7 +76,7 @@ final class MeterDataManager: ObservableObject {
     private func fetchTodaysHack(userId: String) async {
         do {
             struct HackRequest: Encodable { let userId: String }
-            
+
             // Full hack response structure
             struct HackResponse: Decodable {
                 let hackName: String
@@ -88,12 +88,12 @@ final class MeterDataManager: ObservableObject {
                 let isCompleted: Bool?
                 let audioUrls: [String]?
             }
-            
+
             let response: HackResponse = try await supabase.client.functions.invoke(
                 "generate-brain-hack",
                 options: FunctionInvokeOptions(body: HackRequest(userId: userId))
             )
-            
+
             // Cache the complete hack data
             todaysHack = BrainHack(
                 hackName: response.hackName,
@@ -105,13 +105,13 @@ final class MeterDataManager: ObservableObject {
                 isCompleted: response.isCompleted ?? false,
                 audioUrls: response.audioUrls
             )
-            
+
             isTodayHackComplete = response.isCompleted ?? false
-            
+
             print("✅ Today's hack preloaded: \(response.hackName)")
             print("   Completion status: \(isTodayHackComplete)")
             print("   Audio URLs: \(response.audioUrls?.count ?? 0) files")
-            
+
         } catch {
             todaysHack = nil
             isTodayHackComplete = false

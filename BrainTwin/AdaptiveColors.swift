@@ -37,8 +37,18 @@ extension Color {
         dark: Color.black
     )
     
-    /// Primary accent - Electric Yellow in BOTH modes (energetic consistency)
-    static let appAccent = Color(hex: "#FFD60A") // Electric Yellow
+    /// Primary accent - Gold (from gradient) in BOTH modes
+    static let appAccent = Color(red: 1.0, green: 0.84, blue: 0.0) // Gold
+
+    /// Accent gradient - Orange to Gold (used for buttons, headings, highlights)
+    static let appAccentGradient = LinearGradient(
+        colors: [
+            Color(red: 1.0, green: 0.6, blue: 0.2),  // Warm orange
+            Color(red: 1.0, green: 0.84, blue: 0.0)  // Gold
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
     
     /// Secondary background for cards
     static let appCardBackground = Color(

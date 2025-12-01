@@ -7,8 +7,7 @@ struct ContentView: View {
     @AppStorage("hasSeenIntro_v2") private var hasSeenIntro = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @AppStorage("hasSeenThankYou") private var hasSeenThankYou = false  // ✅ NEW: Track thank you screen
-    
-    @State private var showAnimation = true
+
     @State private var isCheckingReceipt = true  // ✅ NEW: Wait for receipt check
 
 
@@ -20,31 +19,22 @@ struct ContentView: View {
 
             } else if supabase.isSignedIn && hasCompletedOnboarding {
                 // ✅ PRIORITY CHECK: User is signed in and has completed onboarding
-                
+
                 // Check if this is a NEW user who just completed onboarding
                 let justCompleted = UserDefaults.standard.bool(forKey: "justCompletedOnboarding")
-                
+
                 if justCompleted && !hasSeenThankYou {
                     // 🎉 NEW USER: Show Thank You screen after purchase
                     ThankYouView {
                         hasSeenThankYou = true
-                        UserDefaults.standard.set(false, forKey: "justCompletedOnboarding")
+                        // ✅ DON'T reset justCompletedOnboarding here!
+                        // MainTabView needs it to be TRUE to skip loading screen
+                        // It will be reset by MainTabView's determineCheckInFlow()
                     }
                     .transition(.opacity)
-                    
-                } else if showAnimation {
-                    // RETURNING USER: Show animation, then MainTabView
-                    NeuralNetworkAnimationView {
-                        showAnimation = false
-                    }
                 } else {
                     // Show main app
                     MainTabView()
-                }
-                
-            } else if showAnimation {
-                NeuralNetworkAnimationView {
-                    showAnimation = false
                 }
 
             } else if !hasSeenIntro {
@@ -94,10 +84,10 @@ struct ContentView: View {
         // User might have deleted/reinstalled app but still has valid receipt
         await SubscriptionManager.shared.autoIdentifyFromReceiptIfNeeded()
         
-        // ✅ NEW: Pre-fetch data for returning users (during animation time)
+        // ✅ NEW: Pre-fetch data for returning users
         // This eliminates loading states when MainTabView appears
         if supabase.isSignedIn && hasCompletedOnboarding {
-            print("🚀 User is returning - pre-fetching data during animation...")
+            print("🚀 User is returning - pre-fetching data...")
             await prefetchDataForReturningUser()
         }
         
@@ -110,10 +100,10 @@ struct ContentView: View {
         isCheckingReceipt = false
     }
     
-    // ✅ NEW: Pre-fetch data while animation plays (parallel loading)
+    // ✅ NEW: Pre-fetch data (parallel loading)
     // This is what Instagram, TikTok, Spotify do - load during transitions!
     private func prefetchDataForReturningUser() async {
-        print("📦 [Pre-fetch] Starting parallel data loading during animation...")
+        print("📦 [Pre-fetch] Starting parallel data loading...")
         
         // MeterDataManager now fetches BOTH meter data AND complete hack data in parallel
         // This single call loads everything we need for the dashboard

@@ -514,7 +514,14 @@ struct DailyHackView: View {
                         
                         Text(hack.hackName)
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundColor(.yellow)
+                            .foregroundColor(.white)
+                            .overlay(
+                                Color.appAccentGradient
+                                    .mask(
+                                        Text(hack.hackName)
+                                            .font(.system(size: 17, weight: .medium))
+                                    )
+                            )
                             .padding(.horizontal, 24)
                             .frame(maxWidth: geometry.size.width - 48)
                             .multilineTextAlignment(.center)
@@ -726,17 +733,24 @@ struct DailyHackView: View {
                 Text("Progress today")
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.8))
-                
+
                 Spacer()
-                
+
                 Text("\(Int(pageProgress))%")
                     .font(.caption.bold())
-                    .foregroundColor(.yellow)
+                    .foregroundColor(.white)
+                    .overlay(
+                        Color.appAccentGradient
+                            .mask(
+                                Text("\(Int(pageProgress))%")
+                                    .font(.caption.bold())
+                            )
+                    )
             }
             .padding(.horizontal, 32)
-            
+
             ProgressView(value: pageProgress, total: 100)
-                .tint(.yellow)
+                .tint(.appAccent)
                 .padding(.horizontal, 32)
         }
         .padding(.top, 110)
