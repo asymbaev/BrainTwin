@@ -6,9 +6,14 @@ struct OnboardingView: View {
     @StateObject private var viewModel = OnboardingViewModel()
     @Binding var isOnboardingComplete: Bool
     @State private var showProfileSetup = false
-    @State private var isProcessingPurchase = false  // ✅ NEW: Show loading after purchase
+    @State private var isProcessingPurchase = false  // ✅ Show loading after purchase
+    @State private var showNameCollection = false  // ✅ NEW: Show name collection after purchase
+    @State private var userName: String = ""  // ✅ NEW: Store user's name
     
     @AppStorage("appearanceMode") private var appearanceMode = "system"
+    @AppStorage("userName") private var storedUserName: String = ""  // ✅ NEW: Persist name
+    
+    @Environment(\.colorScheme) var colorScheme  // ✅ NEW: For dark mode support
     
 //    @AppStorage("welcomeTypewriterCompleted") private var welcomeTypewriterCompleted = false
     
@@ -124,26 +129,28 @@ struct OnboardingView: View {
         }
         .preferredColorScheme(preferredColorScheme)
         .overlay {
-            // ✅ NEW: Show loading overlay immediately after purchase
+            // ✅ Show loading overlay immediately after purchase
             if isProcessingPurchase {
                 ZStack {
                     Color.appBackground.ignoresSafeArea()
                     
                     VStack(spacing: 24) {
                         ProgressView()
-                            .scaleEffect(1.5)
                             .tint(.appAccent)
+                            .scaleEffect(1.5)
                         
-                        Text("Setting up your account...")
+                        Text("Setting up your journey...")
                             .font(.headline)
                             .foregroundColor(.appTextPrimary)
-                        
-                        Text("This will only take a moment")
-                            .font(.subheadline)
-                            .foregroundColor(.appTextSecondary)
                     }
                 }
                 .transition(.opacity)
+            }
+            
+            // ✅ NEW: Show name collection after purchase processing
+            if showNameCollection {
+                nameCollectionView
+                    .transition(.opacity)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .purchaseCompleted)) { _ in
@@ -154,12 +161,30 @@ struct OnboardingView: View {
             withAnimation(.easeInOut(duration: 0.3)) {
                 isProcessingPurchase = true
             }
+            print("⏳ [Onboarding] isProcessingPurchase = true")
             
             // Process in background
             Task {
                 await checkIfUserSubscribed()
                 
-                // Loading will disappear when ContentView shows ThankYouView
+                print("✅ [Onboarding] checkIfUserSubscribed completed")
+                
+                // ✅ After processing, show name collection instead of completing
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    print("🎯 [Onboarding] About to show name collection...")
+                    print("   isProcessingPurchase: \(isProcessingPurchase)")
+                    print("   showNameCollection: \(showNameCollection)")
+                    print("   isOnboardingComplete: \(isOnboardingComplete)")
+                    
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        isProcessingPurchase = false
+                        showNameCollection = true
+                    }
+                    
+                    print("✅ [Onboarding] Name collection should now be visible!")
+                    print("   isProcessingPurchase: \(isProcessingPurchase)")
+                    print("   showNameCollection: \(showNameCollection)")
+                }
             }
         }
     }
@@ -369,10 +394,8 @@ struct OnboardingView: View {
         
         if isSubscribed && hasUserId {
             // User has BOTH subscription AND account created from receipt
-            print("✅ [OnboardingView] Both conditions met! Completing onboarding...")
-            await MainActor.run {
-                completeOnboarding()
-            }
+            print("✅ [OnboardingView] Both conditions met! Ready for name collection...")
+            // ✅ DON'T complete onboarding here - let name collection screen handle it
         } else {
             // Wait longer for account creation to complete
             print("⏳ [OnboardingView] Conditions not met, waiting 3 seconds...")
@@ -390,8 +413,8 @@ struct OnboardingView: View {
                 
                 if stillSubscribed && nowHasUserId {
                     // Account created successfully
-                    print("✅ [OnboardingView] Both conditions met on recheck! Completing onboarding...")
-                    completeOnboarding()
+                    print("✅ [OnboardingView] Both conditions met on recheck! Ready for name collection...")
+                    // ✅ DON'T complete onboarding here - let name collection screen handle it
                 } else {
                     print("⚠️ [OnboardingView] Conditions still not met after recheck")
                     print("   → Showing paywall again...")
@@ -1637,6 +1660,187 @@ struct StruggleOptionButton: View {
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(isSelected ? Color.appAccentGradient : LinearGradient(colors: [Color.appCardBorder], startPoint: .leading, endPoint: .trailing), lineWidth: isSelected ? 2 : 1)
             )
+        }
+    }
+}
+
+// MARK: - Name Collection View
+
+extension OnboardingView {
+    private var nameCollectionView: some View {
+        ZStack {
+            // Background
+            Color.appBackground.ignoresSafeArea()
+            
+            // Subtle depth gradient (only in dark mode)
+            if colorScheme == .dark {
+                RadialGradient(
+                    colors: [
+                        Color(white: 0.04),
+                        Color.black
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 500
+                )
+                .ignoresSafeArea()
+            }
+            
+            VStack(spacing: 0) {
+                Spacer()
+                
+                // Lightning bolt with glow effect
+                ZStack {
+                    // Glow layers
+                    Text("⚡")
+                        .font(.system(size: 80))
+                        .blur(radius: 20)
+                        .opacity(0.6)
+                    
+                    Text("⚡")
+                        .font(.system(size: 80))
+                        .blur(radius: 10)
+                        .opacity(0.4)
+                    
+                    // Main lightning
+                    Text("⚡")
+                        .font(.system(size: 80))
+                }
+                .padding(.bottom, 24)
+                
+                // Header with gradient text
+                VStack(spacing: 16) {
+                    Text("You're all set!")
+                        .font(.system(size: 32, weight: .bold))
+                        .foregroundColor(.appTextPrimary)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("What should we call you?")
+                        .font(.title3)
+                        .foregroundColor(.appTextSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.bottom, 40)
+                
+                // Name input field with gradient border
+                ZStack {
+                    // Gradient border effect
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.appAccent.opacity(0.3),
+                                    Color.orange.opacity(0.3)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(height: 60)
+                        .blur(radius: 8)
+                    
+                    // Input field
+                    TextField("Enter your name", text: $userName)
+                        .font(.title3)
+                        .foregroundColor(.appTextPrimary)
+                        .multilineTextAlignment(.center)
+                        .padding()
+                        .frame(height: 56)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(Color.appCardBackground)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [Color.appAccent, Color.orange],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 2
+                                )
+                        )
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.words)
+                }
+                .padding(.horizontal, 40)
+                
+                Spacer()
+                
+                // Continue button with gradient
+                Button {
+                    completeNameCollection()
+                } label: {
+                    HStack(spacing: 12) {
+                        Text("Continue")
+                            .font(.headline)
+                        
+                        Image(systemName: "arrow.right")
+                            .font(.headline.bold())
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        Group {
+                            if userName.trimmingCharacters(in: .whitespaces).isEmpty {
+                                Color.gray.opacity(0.3)
+                            } else {
+                                Color.appAccentGradient
+                            }
+                        }
+                    )
+                    .cornerRadius(16)
+                    .shadow(
+                        color: userName.trimmingCharacters(in: .whitespaces).isEmpty ? 
+                            .clear : 
+                            Color.appAccent.opacity(0.3),
+                        radius: 12,
+                        x: 0,
+                        y: 6
+                    )
+                }
+                .disabled(userName.trimmingCharacters(in: .whitespaces).isEmpty)
+                .padding(.horizontal, 40)
+                .padding(.bottom, 16)
+                
+                // Skip button
+                Button {
+                    userName = ""
+                    completeNameCollection()
+                } label: {
+                    Text("Skip for now")
+                        .font(.subheadline)
+                        .foregroundColor(.appTextSecondary)
+                }
+                .padding(.bottom, 40)
+            }
+        }
+    }
+    
+    private func completeNameCollection() {
+        // Save name to UserDefaults (for offline cache)
+        let trimmedName = userName.trimmingCharacters(in: .whitespaces)
+        storedUserName = trimmedName.isEmpty ? "" : trimmedName
+        
+        // Save name to Supabase backend (for persistence across reinstalls)
+        if !trimmedName.isEmpty {
+            Task {
+                do {
+                    try await SupabaseManager.shared.updateUserName(name: trimmedName)
+                    print("✅ [Onboarding] Name saved to backend: '\(trimmedName)'")
+                } catch {
+                    print("❌ [Onboarding] Failed to save name to backend: \(error)")
+                    // Still proceed with onboarding even if backend save fails
+                }
+            }
+        }
+        
+        // Complete onboarding
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showNameCollection = false
+            isOnboardingComplete = true
         }
     }
 }

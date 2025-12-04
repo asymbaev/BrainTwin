@@ -64,42 +64,7 @@ struct DailyHackView: View {
                     print("🔄 Page changed from \(oldValue) to \(newValue)")
                 }
                 
-                VStack {
-                    HStack {
-                        if currentPage > 0 {
-                            Button {
-                                withAnimation {
-                                    currentPage -= 1
-                                }
-                            } label: {
-                                Image(systemName: "chevron.left")
-                                    .font(.title3)
-                                    .foregroundColor(currentPage == 0 ? .white : (colorScheme == .dark ? .white : .appTextPrimary))
-                                    .padding()
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Circle())
-                            }
-                            .padding()
-                        } else {
-                            Color.clear.frame(width: 60, height: 60)
-                        }
-                        
-                        Spacer()
-                        
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.title3)
-                                .foregroundColor(currentPage == 0 ? .white : (colorScheme == .dark ? .white : .appTextPrimary))
-                                .padding()
-                                .background(.ultraThinMaterial)
-                                .clipShape(Circle())
-                        }
-                        .padding()
-                    }
-                    Spacer()
-                }
+                // Floating overlay removed - buttons moved to page headers for perfect alignment
                 
                 // Voice Controls (only show in Listen mode)
                 if autoPlayVoice {
@@ -585,7 +550,7 @@ struct DailyHackView: View {
                             .padding(.top, 20)
                             
                             Text("The Brain Hack")
-                                .font(.system(size: 20, weight: .semibold))
+                                .font(.system(size: 22, weight: .bold))
                                 .foregroundColor(.appTextPrimary)
                                 .multilineTextAlignment(.center)
                                 .lineSpacing(4)
@@ -594,8 +559,8 @@ struct DailyHackView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                             
                             Text(hack.neuroscience)
-                                .font(.system(size: 18))
-                                .foregroundColor(.appTextSecondary)
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(.appTextPrimary)
                                 .multilineTextAlignment(.center)
                                 .lineSpacing(6)
                                 .padding(.horizontal, 24)
@@ -604,8 +569,8 @@ struct DailyHackView: View {
                             
                             if let personalization = hack.personalization, !personalization.isEmpty {
                                 Text(personalization)
-                                    .font(.system(size: 18))
-                                    .foregroundColor(.appTextSecondary)
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(.appTextPrimary)
                                     .multilineTextAlignment(.center)
                                     .lineSpacing(6)
                                     .padding(.horizontal, 24)
@@ -677,7 +642,7 @@ struct DailyHackView: View {
                                 .frame(maxWidth: geometry.size.width - 48)
                             
                             Text(hack.explanation)
-                                .font(.system(size: 18))
+                                .font(.system(size: 18, weight: .medium))
                                 .foregroundColor(.appTextPrimary)
                                 .multilineTextAlignment(.center)
                                 .lineSpacing(6)
@@ -724,83 +689,137 @@ struct DailyHackView: View {
     // MARK: - Top Section (FOR PAGE 1 - WHITE TEXT)
     
     private func topSection(progress: Double) -> some View {
-        VStack(spacing: 8) {
-            Text("Today's Brain Hack")
-                .font(.headline)
-                .foregroundColor(.white)
-            
-            HStack {
-                Text("Progress today")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.8))
-
+        VStack(spacing: 20) {
+            // Header Row: Placeholder - Title - X Button
+            HStack(alignment: .center) {
+                // Placeholder for balance (since no back button on page 1)
+                Color.clear.frame(width: 40, height: 40)
+                
                 Spacer()
-
-                Text("\(Int(pageProgress))%")
-                    .font(.caption.bold())
+                
+                Text("Today's Brain Hack")
+                    .font(.headline)
                     .foregroundColor(.white)
-                    .overlay(
-                        Color.appAccentGradient
-                            .mask(
-                                Text("\(Int(pageProgress))%")
-                                    .font(.caption.bold())
-                            )
-                    )
+                    .shadow(radius: 2)
+                
+                Spacer()
+                
+                // X Button (White for Page 1)
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Color.black.opacity(0.5))
+                        .clipShape(Circle())
+                }
             }
-            .padding(.horizontal, 32)
+            .padding(.horizontal, 20)
+            
+            // Progress Section
+            VStack(spacing: 8) {
+                HStack {
+                    Text("Progress today")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
 
-            ProgressView(value: pageProgress, total: 100)
-                .tint(.appAccent)
+                    Spacer()
+
+                    Text("\(Int(pageProgress))%")
+                        .font(.caption.bold())
+                        .foregroundColor(.white)
+                        .overlay(
+                            Color.appAccentGradient
+                                .mask(
+                                    Text("\(Int(pageProgress))%")
+                                        .font(.caption.bold())
+                                )
+                        )
+                }
                 .padding(.horizontal, 32)
+
+                ProgressView(value: pageProgress, total: 100)
+                    .tint(.appAccent)
+                    .padding(.horizontal, 32)
+            }
         }
-        .padding(.top, 110)
+        .padding(.top, 60)
         .padding(.bottom, 12)
     }
     
     // MARK: - Top Section (FOR PAGES 2 & 3 - ADAPTIVE TEXT)
     
     private func topSectionPages23(progress: Double) -> some View {
-        VStack(spacing: 8) {
-            Text("Today's Brain Hack")
-                .font(.headline)
-                .foregroundColor(.appTextPrimary)
-            
-            HStack {
-                Text("Progress today")
-                    .font(.caption)
-                    .foregroundColor(.appTextSecondary)
+        VStack(spacing: 20) {
+            // Header Row: Back - Title - X Button
+            HStack(alignment: .center) {
+                // Back Button (Dark for Pages 2-3)
+                Button {
+                    withAnimation {
+                        currentPage -= 1
+                    }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.appTextPrimary)
+                        .frame(width: 36, height: 36)
+                        .background(Color.appTextPrimary.opacity(0.05))
+                        .clipShape(Circle())
+                }
                 
                 Spacer()
                 
-                Text("\(Int(pageProgress))%")
-                    .font(.caption.bold())
-                    .foregroundColor(.appAccent)
+                Text("Today's Brain Hack")
+                    .font(.headline)
+                    .foregroundColor(.appTextPrimary)
+                
+                Spacer()
+                
+                // X Button (Dark for Pages 2-3)
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.appTextPrimary)
+                        .frame(width: 36, height: 36)
+                        .background(Color.appTextPrimary.opacity(0.05))
+                        .clipShape(Circle())
+                }
             }
-            .padding(.horizontal, 32)
+            .padding(.horizontal, 20)
             
-            ProgressView(value: pageProgress, total: 100)
-                .tint(.appAccent)
+            // Progress Section
+            VStack(spacing: 8) {
+                HStack {
+                    Text("Progress today")
+                        .font(.caption)
+                        .foregroundColor(.appTextSecondary)
+                    
+                    Spacer()
+                    
+                    Text("\(Int(pageProgress))%")
+                        .font(.caption.bold())
+                        .foregroundColor(.appAccent)
+                }
                 .padding(.horizontal, 32)
+                
+                ProgressView(value: pageProgress, total: 100)
+                    .tint(.appAccent)
+                    .padding(.horizontal, 32)
+            }
         }
-        .padding(.top, 110)
+        .padding(.top, 60)
         .padding(.bottom, 12)
     }
     
     // MARK: - Bottom Buttons (UPDATED WITH ADAPTIVE COLORS)
     
     private func bottomButtons(isLastPage: Bool, isPage1: Bool) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                showShareSheet = true
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.title2)
-                    .foregroundColor(isPage1 ? .white : (colorScheme == .dark ? .white : .appTextPrimary))
-                    .frame(width: 56, height: 56)
-                    .background(.ultraThinMaterial)
-                    .cornerRadius(14)
-            }
-            
+        HStack(spacing: 12) {
+            // Chat button - Adaptive Monochrome
             Button {
                 switch currentPage {
                 case 0: chatFromPage = .quote
@@ -810,20 +829,27 @@ struct DailyHackView: View {
                 }
                 showChat = true
             } label: {
-                HStack(spacing: 6) {
-                    Text("Chat to learn more")
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    Image(systemName: "message.fill")
+                VStack(spacing: 4) {
+                    ZStack {
+                        // Adaptive Background - EXACT MATCH with Top Buttons
+                        Circle()
+                            .fill(isPage1 ? Color.black.opacity(0.5) : Color.appTextPrimary.opacity(0.05))
+                            .frame(width: 48, height: 48)
+                        
+                        Image(systemName: "message.fill")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(isPage1 ? .white : .appTextPrimary)
+                    }
+                    
+                    Text("Ask Neuro")
+                        .font(.caption2.weight(.medium))
+                        .foregroundColor(isPage1 ? .white : .appTextPrimary)
                 }
-                .font(.subheadline.bold())
-                .foregroundColor(isPage1 ? .white : (colorScheme == .dark ? .white : .appTextPrimary))
-                .frame(maxWidth: .infinity)
-                .frame(height: 56)
-                .background(.ultraThinMaterial)
-                .cornerRadius(14)
             }
             
+            Spacer()
+            
+            // Next/Done button - Adaptive Monochrome
             if isLastPage {
                 Button {
                     Task {
@@ -831,12 +857,22 @@ struct DailyHackView: View {
                         dismiss()
                     }
                 } label: {
-                    Text("Done")
-                        .font(.headline)
-                        .foregroundColor(colorScheme == .dark ? .black : .white)
-                        .frame(width: 72, height: 56)
-                        .background(Color.appAccent)
-                        .cornerRadius(14)
+                    VStack(spacing: 4) {
+                        ZStack {
+                            // Adaptive Background - EXACT MATCH with Top Buttons
+                            Circle()
+                                .fill(isPage1 ? Color.black.opacity(0.5) : Color.appTextPrimary.opacity(0.05))
+                                .frame(width: 48, height: 48)
+                            
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(isPage1 ? .white : .appTextPrimary)
+                        }
+                        
+                        Text("Done")
+                            .font(.caption2.weight(.medium))
+                            .foregroundColor(.appTextPrimary)
+                    }
                 }
             } else {
                 Button {
@@ -844,18 +880,26 @@ struct DailyHackView: View {
                         currentPage += 1
                     }
                 } label: {
-                    Image(systemName: "arrow.right")
-                        .font(.title2.bold())
-                        .foregroundColor(isPage1 ? .white : (colorScheme == .dark ? .white : .appTextPrimary))
-                        .frame(width: 72, height: 56)
-                        .background(.ultraThinMaterial)
-                        .overlay(
-                            isPage1 ? Color.white.opacity(0.3) : Color.clear
-                        )                        .cornerRadius(14)
+                    VStack(spacing: 4) {
+                        ZStack {
+                            // Adaptive Background - EXACT MATCH with Top Buttons
+                            Circle()
+                                .fill(isPage1 ? Color.black.opacity(0.5) : Color.appTextPrimary.opacity(0.05))
+                                .frame(width: 48, height: 48)
+                            
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(isPage1 ? .white : .appTextPrimary)
+                        }
+                        
+                        Text("Next")
+                            .font(.caption2.weight(.medium))
+                            .foregroundColor(isPage1 ? .white : .appTextPrimary)
+                    }
                 }
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 32)
     }
     
     // MARK: - Helpers

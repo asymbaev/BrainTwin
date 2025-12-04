@@ -77,27 +77,55 @@ struct HackChatView: View {
 
             ScrollView {
                 VStack(spacing: 20) {
-                    // Add spacer to center content in lower area
+                    // Add spacer to center content
                     Spacer()
-                        .frame(height: 120)
+                        .frame(height: 60)
                     
-                    // Animated Brain Logo (only when no messages) - ADAPTIVE
+                    // NeuroChat-style icon (only when no messages)
                     if viewModel.messages.isEmpty {
-                        VStack(spacing: 20) {
-                            Image(systemName: "brain.head.profile")
-                                .font(.system(size: 60))
-                                .foregroundColor(colorScheme == .dark ? .white.opacity(0.9) : .appTextPrimary.opacity(0.8))
-                                .symbolEffect(.pulse, options: .repeating)
+                        VStack(spacing: 16) {
+                            // Gradient icon (matching main ChatView)
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.appAccent, Color.orange],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 70, height: 70)
+                                    .blur(radius: 15)
+                                    .opacity(0.6)
+                                
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.appAccent, Color.orange],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 64, height: 64)
+                                
+                                Image(systemName: "message.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(.white)
+                            }
+                            
+                            Text("Chat with NeuroChat")
+                                .font(.title2.bold())
+                                .foregroundColor(.appTextPrimary)
                             
                             Text("Ask me anything about this hack")
                                 .font(.subheadline)
                                 .foregroundColor(.appTextSecondary)
                                 .multilineTextAlignment(.center)
                         }
-                        .padding(.bottom, 30)
+                        .padding(.bottom, 20)
                     }
                     
-                    // Suggested Prompts - Now very close to bottom
+                    // Suggested Prompts - pill chips
                     if viewModel.messages.isEmpty {
                         suggestedPromptsView
                             .padding(.bottom, 20)
@@ -105,7 +133,7 @@ struct HackChatView: View {
                     
                     // Chat Messages
                     ForEach(viewModel.messages) { message in
-                        MessageBubble(message: message)
+                        MessageBubble(message: message, isAnimated: true)
                             .padding(.horizontal)
                     }
                     

@@ -258,13 +258,14 @@ class SupabaseManager: ObservableObject {
     
     // MARK: - Email sign in / sign up
 
+
     struct BrainTwinUser: Codable {
         let id: String
-        let email: String
-        let main_struggle: String
+        let email: String?  // ✅ Optional - can be null for receipt-based users
+        let main_struggle: String?  // ✅ Optional - can be null for new users
         let rewire_progress: Double
         let current_streak: Int
-        let skill_level: String
+        let skill_level: String?  // ✅ Optional - can be null for new users
         let onboarding_completed: Bool?
         let goal: String?
         let biggest_struggle: String?
@@ -277,6 +278,7 @@ class SupabaseManager: ObservableObject {
             case onboarding_completed, goal, biggest_struggle, preferred_time, name, age
         }
     }
+
 
     func signInOrSignUpWithEmail(email: String, password: String) async throws {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -382,6 +384,58 @@ class SupabaseManager: ObservableObject {
         
         print("✅ Onboarding COMPLETED and saved for user \(userId)")
     }
+    
+    // MARK: - Update User Name
+    
+    func updateUserName(name: String) async throws {
+        guard let userId = userId else {
+            throw NSError(
+                domain: "SupabaseManager",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "No user ID found"]
+            )
+        }
+        
+        struct NameUpdate: Encodable {
+            let name: String
+        }
+        
+        let update = NameUpdate(name: name)
+        
+        try await client
+            .from("users")
+            .update(update)
+            .eq("id", value: userId)
+            .execute()
+        
+        print("✅ User name updated to '\(name)' for user \(userId)")
+    }
+    
+    // MARK: - Fetch User Name
+    
+    func fetchUserName() async throws -> String? {
+        guard let userId = userId else {
+            print("⚠️ No userId - cannot fetch name")
+            return nil
+        }
+        
+        do {
+            let user: BrainTwinUser = try await client
+                .from("users")
+                .select()
+                .eq("id", value: userId)
+                .single()
+                .execute()
+                .value
+            
+            print("✅ Fetched user name: '\(user.name ?? "nil")' for user \(userId)")
+            return user.name
+            
+        } catch {
+            print("❌ Error fetching user name: \(error)")
+            return nil
+        }
+    }
 
     // MARK: - Sign in with Apple
 
@@ -413,5 +467,87 @@ class SupabaseManager: ObservableObject {
         print("✅ Signed in with Apple. User ID: \(session.user.id.uuidString)")
 
         try await createUserIfNeeded(userId: session.user.id.uuidString)
+    }
+    
+    // MARK: - Profile Picture Management
+    
+    /// Upload profile picture to Supabase Storage and save URL to database
+    func uploadProfilePicture(_ image: UIImage) async throws -> String {
+        guard let userId = userId else {
+            throw NSError(domain: "SupabaseManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "No user ID"])
+        }
+        
+        // Compress image
+        guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+            throw NSError(domain: "SupabaseManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to compress image"])
+        }
+        
+        let fileName = "\(userId)/avatar.jpg"
+        
+        // Upload to Supabase Storage
+        do {
+            // Upload using Data directly (Supabase Swift SDK expects Data)
+            _ = try await client.storage
+                .from("profile-pictures")
+                .upload(
+                    path: fileName,
+                    file: imageData,
+                    options: FileOptions(
+                        cacheControl: "3600",
+                        contentType: "image/jpeg",
+                        upsert: true
+                    )
+                )
+            
+            print("✅ Profile picture uploaded: \(fileName)")
+        } catch {
+            print("❌ Upload error: \(error)")
+            throw error
+        }
+        
+        // Get public URL
+        let publicURL = try client.storage
+            .from("profile-pictures")
+            .getPublicURL(path: fileName)
+        
+        let urlString = publicURL.absoluteString
+        
+        // Save URL to database
+        try await client
+            .from("users")
+            .update(["profile_picture_url": urlString])
+            .eq("id", value: userId)
+            .execute()
+        
+        print("✅ Profile picture URL saved to database: \(urlString)")
+        
+        return urlString
+    }
+    
+    /// Fetch profile picture URL from database
+    func fetchProfilePictureURL() async throws -> String? {
+        guard let userId = userId else { return nil }
+        
+        struct UserProfile: Decodable {
+            let profile_picture_url: String?
+        }
+        
+        let response: UserProfile = try await client
+            .from("users")
+            .select("profile_picture_url")
+            .eq("id", value: userId)
+            .single()
+            .execute()
+            .value
+        
+        return response.profile_picture_url
+    }
+    
+    /// Download profile picture from URL
+    func downloadProfilePicture(from urlString: String) async throws -> UIImage? {
+        guard let url = URL(string: urlString) else { return nil }
+        
+        let (data, _) = try await URLSession.shared.data(from: url)
+        return UIImage(data: data)
     }
 }

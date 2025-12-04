@@ -4,127 +4,226 @@ import Combine
 struct ChatView: View {
     @StateObject private var viewModel = ChatViewModel()
     @Environment(\.colorScheme) var colorScheme
-    
-    // ✅ Appearance override (same as DailyHackView)
     @AppStorage("appearanceMode") private var appearanceMode = "system"
     
     var initialContext: String? = nil
     @State private var messageText = ""
     @FocusState private var isTextFieldFocused: Bool
+    @State private var animatedMessages: Set<UUID> = []
 
-    // ✅ Computed color scheme based on user preference
     private var preferredColorScheme: ColorScheme? {
         switch appearanceMode {
         case "light": return .light
         case "dark": return .dark
-        default: return nil // System
+        default: return nil
         }
     }
 
     var body: some View {
         ZStack {
-            // ✅ Adaptive background (same as DailyHackView pages 2-3)
+            // Clean background
             Color.appBackground.ignoresSafeArea()
-            
-            // ✅ Subtle depth gradient (only in dark mode)
-            if colorScheme == .dark {
-                RadialGradient(
-                    colors: [
-                        Color(white: 0.04),
-                        Color.black
-                    ],
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: 500
-                )
-                .ignoresSafeArea()
-                
-                // Keep starfield in dark mode for ambiance
-                ChatStarfieldView().ignoresSafeArea()
-            }
 
             VStack(spacing: 0) {
                 // Messages / Welcome
-                ScrollView {
-                    VStack(spacing: 16) {
-                        if viewModel.messages.isEmpty {
-                            VStack(spacing: 10) {
-                                Text("Chat with Your Brain Twin")
-                                    .font(.title2.bold())
-                                    .foregroundColor(.appTextPrimary)
-
-                                Text("I'm here to help you understand your brain and overcome your challenges. Ask me anything!")
-                                    .font(.subheadline)
-                                    .foregroundColor(.appTextSecondary)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            if viewModel.messages.isEmpty {
+                                welcomeView
                             }
-                            .padding(.top, 18)
-                        }
 
-                        ForEach(viewModel.messages) { message in
-                            MessageBubble(message: message)
-                                .id(message.id)
-                        }
-
-                        if viewModel.isLoading {
-                            HStack {
-                                ProgressView()
-                                    .tint(.appAccent)
-                                    .padding(.leading, 16)
-                                Text("Brain Twin is thinking...")
-                                    .font(.caption)
-                                    .foregroundColor(.appTextSecondary)
-                                Spacer()
+                            ForEach(viewModel.messages) { message in
+                                MessageBubble(message: message, isAnimated: animatedMessages.contains(message.id))
+                                    .id(message.id)
+                                    .onAppear {
+                                        if !animatedMessages.contains(message.id) {
+                                            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                                animatedMessages.insert(message.id)
+                                            }
+                                        }
+                                    }
                             }
-                            .padding(.vertical, 8)
-                        }
 
-                        Color.clear.frame(height: 16)
+                            if viewModel.isLoading {
+                                typingIndicator
+                            }
+
+                            Color.clear.frame(height: 16)
+                                .id("bottom")
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 4)
                     }
-                    .padding(.horizontal)
-                    .padding(.top, 4)
-                }
-                /// 👇 Option A: tap anywhere in the chat area to dismiss keyboard
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    isTextFieldFocused = false
-                }
-                /// 👇 Option C: swipe/drag down to dismiss keyboard
-                .simultaneousGesture(
-                    DragGesture().onChanged { value in
-                        if value.translation.height > 10 {
-                            isTextFieldFocused = false
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        isTextFieldFocused = false
+                    }
+                    .simultaneousGesture(
+                        DragGesture().onChanged { value in
+                            if value.translation.height > 10 {
+                                isTextFieldFocused = false
+                            }
+                        }
+                    )
+                    .onChange(of: viewModel.messages.count) { _ in
+                        withAnimation {
+                            proxy.scrollTo("bottom", anchor: .bottom)
                         }
                     }
-                )
+                }
 
+                // Suggested Prompts (only when empty)
+                if viewModel.messages.isEmpty && !viewModel.isLoading {
+                    suggestedPromptsView
+                }
 
-                // ✅ Input Area - FIXED FOR KEYBOARD
+                // Glassmorphism Input Bar
                 inputBar
-                    .background(Color.appBackground)
             }
         }
-        // ✅ REMOVED .ignoresSafeArea(.keyboard) - This was the main bug!
-        .navigationTitle("Chat")
+        .navigationTitle("NeuroChat")
         .navigationBarTitleDisplayMode(.inline)
-        .background(Color.clear)
-        // ✅ Apply user's preferred color scheme
         .preferredColorScheme(preferredColorScheme)
         .onAppear {
-            isTextFieldFocused = true
+            // Removed auto-focus - keyboard only appears when user taps input
             if let context = initialContext {
                 Task { await viewModel.sendMessage(context) }
             }
         }
     }
 
-    // MARK: - Input Bar - FIXED FOR REAL DEVICES
+    // MARK: - Suggested Prompts
+    
+    private var suggestedPromptsView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(suggestedPrompts, id: \.self) { prompt in
+                    Button {
+                        messageText = prompt
+                        sendMessage()
+                    } label: {
+                        Text(prompt)
+                            .font(.subheadline)
+                            .foregroundColor(.appTextPrimary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(
+                                Capsule()
+                                    .fill(Color.appCardBackground)
+                            )
+                            .overlay(
+                                Capsule()
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [Color.appAccent.opacity(0.3), Color.orange.opacity(0.3)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            )
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        .padding(.bottom, 8)
+    }
+    
+    private var suggestedPrompts: [String] {
+        [
+            "Help me build better habits",
+            "Why do I procrastinate?",
+            "Tips for staying motivated",
+            "Improve my focus"
+        ]
+    }
+
+    // MARK: - Welcome View
+    
+    private var welcomeView: some View {
+        VStack(spacing: 16) {
+            // Gradient icon
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.appAccent, Color.orange],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 70, height: 70)
+                    .blur(radius: 15)
+                    .opacity(0.6)
+                
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.appAccent, Color.orange],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 64, height: 64)
+                
+                Image(systemName: "message.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.white)
+            }
+            .padding(.top, 40)
+            
+            Text("Chat with NeuroChat")
+                .font(.title2.bold())
+                .foregroundColor(.appTextPrimary)
+
+            Text("Ask me anything about your habits, challenges, or personal growth.")
+                .font(.subheadline)
+                .foregroundColor(.appTextSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+    }
+
+    // MARK: - Typing Indicator
+    
+    private var typingIndicator: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<3) { index in
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.appAccent, Color.orange],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: 8, height: 8)
+                    .offset(y: typingOffset(for: index))
+            }
+        }
+        .padding(.leading, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 12)
+    }
+    
+    private func typingOffset(for index: Int) -> CGFloat {
+        let animation = Animation
+            .easeInOut(duration: 0.6)
+            .repeatForever(autoreverses: true)
+            .delay(Double(index) * 0.2)
+        
+        return withAnimation(animation) {
+            viewModel.isLoading ? -4 : 0
+        } ?? 0
+    }
+
+    // MARK: - Input Bar with Glassmorphism
+    
     private var inputBar: some View {
         VStack(spacing: 0) {
-            Divider()
-                .background(Color.appCardBorder)
-
+            // Glassmorphism container
             HStack(spacing: 12) {
                 // Text Input Field
                 ZStack(alignment: .leading) {
@@ -133,7 +232,7 @@ struct ChatView: View {
                             Image(systemName: "text.cursor")
                                 .font(.subheadline)
                                 .foregroundColor(.appTextSecondary)
-                            Text("Write any question here")
+                            Text("Message NeuroChat...")
                                 .foregroundColor(.appTextSecondary)
                                 .font(.subheadline)
                         }
@@ -150,135 +249,137 @@ struct ChatView: View {
                         .submitLabel(.send)
                         .onSubmit { sendMessage() }
                 }
-                .background(Color.appCardBackground)
+                .background(Color.appCardBackground.opacity(0.8))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.appCardBorder, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(
+                            isTextFieldFocused ?
+                            LinearGradient(
+                                colors: [Color.appAccent, Color.orange],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ) :
+                            LinearGradient(
+                                colors: [Color.appCardBorder, Color.appCardBorder],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ),
+                            lineWidth: isTextFieldFocused ? 2 : 1
+                        )
                 )
-                .cornerRadius(16)
+                .cornerRadius(20)
 
-                // Send Button
+                // Send Button with Animation
                 Button {
                     sendMessage()
                 } label: {
-                    Image(systemName: "paperplane.fill")
-                        .font(.title3)
-                        .foregroundColor(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .appTextSecondary : (colorScheme == .dark ? .black : .white))
-                        .frame(width: 44, height: 44)
-                        .background(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.appCardBackground : Color.appAccent)
-                        .overlay(
+                    Image(systemName: messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "arrow.up.circle.fill" : "arrow.up.circle.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(.white)
+                        .background(
                             Circle()
-                                .stroke(Color.appCardBorder, lineWidth: messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 1 : 0)
+                                .fill(
+                                    messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?
+                                    LinearGradient(colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing) :
+                                    LinearGradient(colors: [Color.appAccent, Color.orange], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                )
+                                .frame(width: 44, height: 44)
                         )
-                        .clipShape(Circle())
+                        .scaleEffect(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 1.0 : 1.1)
                 }
                 .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isLoading)
-                .animation(.easeInOut(duration: 0.15), value: messageText)
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: messageText)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.vertical, 16) // Increased for more premium feel
+            .background(
+                Color.appBackground
+                    .opacity(0.95)
+                    .blur(radius: 10)
+            )
         }
         .background(Color.appBackground)
     }
 
     // MARK: - Actions
+    
     private func sendMessage() {
         let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        
+        // Haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+        
         messageText = ""
         isTextFieldFocused = false
         Task { await viewModel.sendMessage(text) }
     }
 }
 
-// MARK: - Message Bubble - ADAPTIVE
+// MARK: - Message Bubble with Gradient & Animation
+
 struct MessageBubble: View {
     let message: ChatMessage
+    let isAnimated: Bool
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        HStack(alignment: .bottom) {
-            if message.isUser { Spacer(minLength: 24) }
+        HStack(alignment: .bottom, spacing: 0) {
+            if message.isUser { Spacer(minLength: 40) }
 
             VStack(alignment: message.isUser ? .trailing : .leading, spacing: 6) {
                 Text(message.text)
-                    .font(.system(size: 18, weight: .regular, design: .rounded))
-                    .foregroundColor(.appTextPrimary)
+                    .font(.system(size: 16, weight: .regular, design: .rounded))
+                    .foregroundColor(message.isUser ? .white : .appTextPrimary)
                     .lineSpacing(4)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        Group {
+                            if message.isUser {
+                                // Gradient bubble for user
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.appAccent, Color.orange],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .shadow(color: Color.appAccent.opacity(0.3), radius: 8, x: 0, y: 4)
+                            } else {
+                                // Solid bubble for AI
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(Color.appCardBackground)
+                            }
+                        }
+                    )
 
                 Text(message.timestamp, style: .time)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundColor(.appTextSecondary)
-                    .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundColor(.appTextSecondary.opacity(0.7))
+                    .padding(.horizontal, 4)
             }
-            .padding(.horizontal, 4)
-            .frame(maxWidth: 520, alignment: message.isUser ? .trailing : .leading)
+            .scaleEffect(isAnimated ? 1.0 : 0.8)
+            .opacity(isAnimated ? 1.0 : 0)
 
-            if !message.isUser { Spacer(minLength: 24) }
+            if !message.isUser { Spacer(minLength: 40) }
         }
     }
 }
 
 // MARK: - Model
+
 struct ChatMessage: Identifiable {
     let id = UUID()
-    let text: String
+    var text: String // Changed to var for typing animation
     let isUser: Bool
     let timestamp: Date
 }
 
-// MARK: - Lightweight starfield (only visible in dark mode)
-private struct ChatStarfieldView: View {
-    @State private var stars: [ChatStar] = []
-
-    var body: some View {
-        TimelineView(.animation) { _ in
-            GeometryReader { geo in
-                Canvas { ctx, size in
-                    if stars.isEmpty {
-                        stars = (0..<140).map { i in
-                            ChatStar(
-                                id: i,
-                                x: CGFloat.random(in: 0...size.width),
-                                y: CGFloat.random(in: 0...size.height),
-                                size: CGFloat.random(in: 0.6...2.2),
-                                baseOpacity: Double.random(in: 0.25...0.85),
-                                blur: CGFloat.random(in: 0...1.4),
-                                twinkle: Double.random(in: 1.6...3.4),
-                                phase: Double.random(in: 0...(.pi * 2))
-                            )
-                        }
-                    }
-
-                    let t = Date().timeIntervalSinceReferenceDate
-                    for s in stars {
-                        var starCtx = ctx
-                        starCtx.addFilter(.blur(radius: s.blur))
-                        let twinkle = 0.35 * (sin(t / s.twinkle + s.phase) + 1) / 2
-                        let a = s.baseOpacity * (0.7 + twinkle * 0.6)
-                        let rect = CGRect(x: s.x, y: s.y, width: s.size, height: s.size)
-                        starCtx.fill(Path(ellipseIn: rect), with: .color(.white.opacity(a)))
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct ChatStar: Identifiable {
-    let id: Int
-    let x: CGFloat
-    let y: CGFloat
-    let size: CGFloat
-    let baseOpacity: Double
-    let blur: CGFloat
-    let twinkle: Double
-    let phase: Double
-}
-
 // MARK: - Preview
+
 #Preview {
     NavigationStack { ChatView() }
 }

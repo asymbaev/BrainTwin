@@ -9,6 +9,7 @@ class ChatViewModel: ObservableObject {
     @Published var errorMessage: String?
     
     private let supabase = SupabaseManager.shared
+    private var typingTask: Task<Void, Never>?
     
     func sendMessage(_ text: String) async {
         guard let userId = supabase.userId else {
@@ -50,27 +51,58 @@ class ChatViewModel: ObservableObject {
             
             print("✅ Got response from Brain Twin")
             
-            // Add Brain Twin response
-            let twinMessage = ChatMessage(
-                text: response.response,
-                isUser: false,
-                timestamp: Date()
-            )
-            messages.append(twinMessage)
+            isLoading = false
+            
+            // Add AI response with typing animation
+            await typeMessage(response.response, isUser: false)
             
         } catch {
             print("❌ Chat error: \(error)")
             errorMessage = "Failed to send message: \(error.localizedDescription)"
             
             // Add error message to chat
-            let errorMsg = ChatMessage(
-                text: "Sorry, I couldn't process that. Please try again.",
-                isUser: false,
-                timestamp: Date()
-            )
-            messages.append(errorMsg)
+            await typeMessage("Sorry, I couldn't process that. Please try again.", isUser: false)
+            
+            isLoading = false
+        }
+    }
+    
+    // MARK: - Typing Animation
+    
+    private func typeMessage(_ fullText: String, isUser: Bool) async {
+        // Cancel any existing typing animation
+        typingTask?.cancel()
+        
+        // Create placeholder message
+        let message = ChatMessage(
+            text: "",
+            isUser: isUser,
+            timestamp: Date()
+        )
+        
+        messages.append(message)
+        
+        guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else {
+            return
         }
         
-        isLoading = false
+        // Type out character by character
+        typingTask = Task {
+            for (index, character) in fullText.enumerated() {
+                if Task.isCancelled { break }
+                
+                // Update the message text
+                messages[messageIndex].text = String(fullText.prefix(index + 1))
+                
+                // Typing speed: ~30 characters per second (realistic)
+                try? await Task.sleep(nanoseconds: 33_000_000) // 33ms per character
+            }
+        }
+        
+        await typingTask?.value
+    }
+    
+    deinit {
+        typingTask?.cancel()
     }
 }

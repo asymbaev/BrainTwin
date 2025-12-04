@@ -5,9 +5,12 @@ import Supabase
 struct DashboardView: View {
     @StateObject private var hackViewModel = DailyHackViewModel()
     @EnvironmentObject var meterDataManager: MeterDataManager
+    @Environment(\.colorScheme) var colorScheme // Moved here as per instruction
     
     // Appearance override (System/Light/Dark)
     @AppStorage("appearanceMode") private var appearanceMode = "system"
+    @AppStorage("userName") private var userName: String = ""  // ✅ NEW: Get user's name
+    @AppStorage("lastViewedCard") private var lastViewedCard: String = "progress"  // ✅ NEW: Remember user preference
     
     @State private var errorText: String?
     @State private var isCardExpanded = false
@@ -15,6 +18,19 @@ struct DashboardView: View {
     @State private var showListenMode = false
     @State private var showReadMode = false
     @State private var pulse = false
+    
+    // ✅ NEW: Flip card animation states
+    @State private var showingProgressCard = true  // true = Progress, false = Streak
+    @State private var isFlipping = false
+    @State private var autoRotationTimer: Timer?
+    @State private var isFirstFlip = true  // ✅ Track if this is the first auto-flip
+    
+    // ✅ NEW: Profile sheet state
+    @State private var showProfileSheet = false
+    
+    // ✅ NEW: Profile image state
+    @AppStorage("profileImageData") private var profileImageData: Data?
+    @State private var profileImage: UIImage?
     
     private var supabase: SupabaseManager { SupabaseManager.shared }
     
@@ -37,50 +53,46 @@ struct DashboardView: View {
                 darkModeDepthGradient
 
                 ScrollView {
-                    VStack(spacing: 6) {
-                        // Gradient Card Container for Meter Section
-                        ZStack {
-                            // Vibrant gradient background
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.0, green: 0.8, blue: 0.9),   // Cyan
-                                    Color(red: 0.4, green: 0.6, blue: 1.0),   // Blue
-                                    Color(red: 0.8, green: 0.4, blue: 1.0),   // Purple
-                                    Color(red: 1.0, green: 0.5, blue: 0.8),   // Pink
-                                    Color(red: 1.0, green: 0.7, blue: 0.5)    // Peach/Orange
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                            
-                            // Glassmorphism overlay
-                            Color.white.opacity(0.15)
-                            
-                            // Content
-                            VStack(spacing: 6) {
-                                Text("Rewire Progress")
-                                    .font(.title3.bold())
-                                    .foregroundColor(.white)
-                                    .padding(.top, 12)
-                                
-                                meterSection
-                                    .padding(.bottom, 8)
-                            }
-                        }
-                        .cornerRadius(24)
-                        .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 10)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 20)
-
-                        streakCalendarView
-                            .padding(.horizontal)
-
+                    VStack(spacing: 20) {
+                        // Greeting header
+                        greetingHeader
+                            .padding(.horizontal, 20)
+                            .padding(.top, 10)
+                        
+                        // ✅ NEW: Flip card (replaces horizontal carousel)
+                        flipCardContainer
+                        
+                        // Hero: Today's Brain Hack Card
                         todayHackCard
                             .padding(.horizontal)
-
+                        
                         errorSection
                     }
-                    .padding(.bottom, 120)
+                    .padding(.bottom, 20)
+                }
+                .onAppear {
+                    // Initialize card based on last viewed preference
+                    showingProgressCard = (lastViewedCard == "progress")
+                    startAutoRotation()
+                    
+                    // Fetch user name from Supabase
+                    Task {
+                        do {
+                            if let fetchedName = try await SupabaseManager.shared.fetchUserName() {
+                                // Update UserDefaults cache with backend value
+                                userName = fetchedName
+                                print("✅ [Dashboard] Synced name from backend: '\(fetchedName)'")
+                            } else {
+                                print("ℹ️ [Dashboard] No name found in backend")
+                            }
+                        } catch {
+                            print("❌ [Dashboard] Failed to fetch name from backend: \(error)")
+                            // Keep using cached UserDefaults value
+                        }
+                    }
+                }
+                .onDisappear {
+                    stopAutoRotation()
                 }
             }
             .navigationTitle("")
@@ -139,6 +151,12 @@ struct DashboardView: View {
                 )
             }
         }
+        .fullScreenCover(isPresented: $showProfileSheet) {
+            NavigationStack {
+                ProfileSheetView()
+                    .environmentObject(meterDataManager)
+            }
+        }
     }
     
     // MARK: - Dark Mode Depth Gradient (only shows in dark mode)
@@ -157,8 +175,6 @@ struct DashboardView: View {
         .ignoresSafeArea()
         .opacity(colorScheme == .dark ? 1 : 0)
     }
-    
-    @Environment(\.colorScheme) var colorScheme
     
     // MARK: - Meter Section
     @ViewBuilder
@@ -225,7 +241,7 @@ struct DashboardView: View {
             hackCardOverlay
             hackCardText
         }
-        .frame(height: 140)
+        .frame(height: 200)
     }
     
     // Hack Card - Background Image
@@ -246,7 +262,7 @@ struct DashboardView: View {
                 )
             }
         }
-        .frame(height: 140)
+        .frame(height: 200)
         .clipped()
     }
     
@@ -381,6 +397,260 @@ struct DashboardView: View {
             )
         }
     }
+    
+    // MARK: - Horizontal Cards Carousel
+    
+    private var horizontalCardsCarousel: some View {
+        VStack(spacing: 12) {
+            TabView {
+                // Progress Card
+                progressGradientCard
+                    .padding(.horizontal, 16)
+                
+                // Streak Card
+                streakGradientCard
+                    .padding(.horizontal, 16)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .always))
+            .indexViewStyle(.page(backgroundDisplayMode: .always))
+            .frame(height: 320)
+        }
+    }
+    
+    // Progress Gradient Card
+    private var progressGradientCard: some View {
+        ZStack {
+            // Vibrant gradient background
+            LinearGradient(
+                colors: [
+                    Color(red: 0.0, green: 0.8, blue: 0.9),   // Cyan
+                    Color(red: 0.4, green: 0.6, blue: 1.0),   // Blue
+                    Color(red: 0.8, green: 0.4, blue: 1.0),   // Purple
+                    Color(red: 1.0, green: 0.5, blue: 0.8),   // Pink
+                    Color(red: 1.0, green: 0.7, blue: 0.5)    // Peach/Orange
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            
+            // Glassmorphism overlay
+            Color.white.opacity(0.15)
+            
+            // Content
+            VStack(spacing: 6) {
+                Text("Rewire Progress")
+                    .font(.title3.bold())
+                    .foregroundColor(.white)
+                    .padding(.top, 12)
+                
+                meterSection
+                    .padding(.bottom, 8)
+            }
+        }
+        .cornerRadius(24)
+        .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 10)
+    }
+    
+    // Streak Gradient Card  
+    private var streakGradientCard: some View {
+        streakCalendarView
+    }
+    
+    // MARK: - 3D Flip Card Animation
+    
+    private var flipCardContainer: some View {
+        ZStack {
+            // Back card (Streak) - shows when rotated
+            if !showingProgressCard || isFlipping {
+                streakGradientCard
+                    .rotation3DEffect(
+                        .degrees(showingProgressCard ? 180 : 0),
+                        axis: (x: 0, y: 1, z: 0)
+                    )
+                    .opacity(showingProgressCard ? 0 : 1)
+            }
+            
+            // Front card (Progress) - shows by default
+            if showingProgressCard || isFlipping {
+                progressGradientCard
+                    .rotation3DEffect(
+                        .degrees(showingProgressCard ? 0 : -180),
+                        axis: (x: 0, y: 1, z: 0)
+                    )
+                    .opacity(showingProgressCard ? 1 : 0)
+            }
+        }
+        .frame(height: 320)
+        .onTapGesture {
+            flipCard()
+        }
+        .padding(.horizontal, 16)
+    }
+    
+    // Flip card animation
+    private func flipCard() {
+        // Perform flip animation
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+            isFlipping = true
+            showingProgressCard.toggle()
+        }
+        
+        // Save preference
+        lastViewedCard = showingProgressCard ? "progress" : "streak"
+        
+        // Reset flipping state
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            isFlipping = false
+        }
+    }
+    
+    // Start auto-rotation timer (10 seconds first time, then 15 seconds)
+    private func startAutoRotation() {
+        stopAutoRotation() // Clear any existing timer
+        
+        print("🔄 [Dashboard] Starting auto-rotation. isFirstFlip: \(isFirstFlip)")
+        
+        if isFirstFlip {
+            // First flip after 10 seconds
+            print("⏱️ [Dashboard] Scheduling first flip in 10 seconds...")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                print("🔄 [Dashboard] Executing first flip!")
+                
+                // Perform first auto-flip
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                    self.isFlipping = true
+                    self.showingProgressCard.toggle()
+                }
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    self.isFlipping = false
+                }
+                
+                self.isFirstFlip = false
+                print("✅ [Dashboard] First flip complete. Starting regular rotation...")
+                
+                // Start regular 15-second timer
+                self.startRegularRotation()
+            }
+        } else {
+            // Already did first flip, start regular rotation
+            print("⏱️ [Dashboard] First flip already done, starting regular rotation...")
+            startRegularRotation()
+        }
+    }
+    
+    // Regular rotation every 15 seconds
+    private func startRegularRotation() {
+        stopAutoRotation() // Clear any existing timer
+        
+        print("⏱️ [Dashboard] Starting regular 15-second rotation timer...")
+        autoRotationTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { _ in
+            print("🔄 [Dashboard] Auto-flip triggered (15s interval)")
+            
+            // Perform auto-flip
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                self.isFlipping = true
+                self.showingProgressCard.toggle()
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                self.isFlipping = false
+            }
+        }
+    }
+    
+    // Stop auto-rotation timer
+    private func stopAutoRotation() {
+        autoRotationTimer?.invalidate()
+        autoRotationTimer = nil
+    }
+    
+    // MARK: - Greeting Header
+    
+    private var greetingHeader: some View {
+        HStack {
+            // Greeting text
+            VStack(alignment: .leading, spacing: 4) {
+                Text(greetingText)
+                    .font(.title3.bold())
+                    .foregroundColor(.appTextPrimary)
+                
+                Text(userName.isEmpty ? "there" : userName)
+                    .font(.title2.bold())
+                    .foregroundColor(.appTextPrimary)
+            }
+            .onAppear {
+                print("🔍 [Dashboard] userName from UserDefaults: '\(userName)'")
+                print("🔍 [Dashboard] userName isEmpty: \(userName.isEmpty)")
+            }
+            
+            Spacer()
+            
+            // Profile picture placeholder - Tappable
+            Button {
+                // Haptic feedback
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
+                
+                showProfileSheet = true
+            } label: {
+                ZStack {
+                    if let profileImage = profileImage {
+                        // Show profile picture
+                        Image(uiImage: profileImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 44, height: 44)
+                            .clipShape(Circle())
+                    } else {
+                        // Show gradient circle with initial
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.appAccent, Color.orange],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 44, height: 44)
+                            .overlay(
+                                Text(userInitial)
+                                    .font(.title3.bold())
+                                    .foregroundColor(.white)
+                            )
+                    }
+                }
+            }
+            .buttonStyle(ScaleButtonStyle())
+            .onAppear {
+                // Load profile image from storage
+                if let imageData = profileImageData, let image = UIImage(data: imageData) {
+                    profileImage = image
+                }
+            }
+        }
+    }
+    
+    // Time-based greeting
+    private var greetingText: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 0..<12:
+            return "Good morning,"
+        case 12..<17:
+            return "Good afternoon,"
+        default:
+            return "Good evening,"
+        }
+    }
+    
+    // User initial for profile picture
+    private var userInitial: String {
+        if userName.isEmpty {
+            return "👤"
+        }
+        return String(userName.prefix(1).uppercased())
+    }
 
     private func miniTag(text: String) -> some View {
         Text(text)
@@ -475,41 +745,139 @@ struct DashboardView: View {
 
     // MARK: - Streak Calendar
     private var streakCalendarView: some View {
-        VStack(spacing: 16) {
-            weekDaysHeader
-            weekDaysGrid
+        ZStack {
+            // Different gradient for streak card (warmer tones)
+            LinearGradient(
+                colors: [
+                    Color(red: 1.0, green: 0.4, blue: 0.3),   // Red-Orange
+                    Color(red: 1.0, green: 0.6, blue: 0.2),   // Orange
+                    Color(red: 1.0, green: 0.8, blue: 0.3),   // Yellow-Orange
+                    Color(red: 1.0, green: 0.5, blue: 0.6)    // Pink-Orange
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            
+            // Glassmorphism overlay
+            Color.white.opacity(0.15)
+            
+            // Content
+            VStack(spacing: 16) {
+                // Streak Counter Header
+                HStack(spacing: 12) {
+                    Text("🔥")
+                        .font(.system(size: 36))
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(currentStreak) Day Streak")
+                            .font(.title3.bold())
+                            .foregroundColor(.white)
+                        
+                        Text("Keep it going!")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                    
+                    Spacer()
+                }
+                
+                // Week Days Header
+                HStack(spacing: 0) {
+                    ForEach(["S", "M", "T", "W", "T", "F", "S"], id: \.self) { day in
+                        Text(day)
+                            .font(.caption2.bold())
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                
+                // Week Days Grid
+                HStack(spacing: 0) {
+                    ForEach(weekDays, id: \.date) { dayData in
+                        dayCircleGradient(dayData: dayData)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                
+                // Weekly Progress Bar
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Weekly Progress")
+                            .font(.caption2.bold())
+                            .foregroundColor(.white.opacity(0.85))
+                        
+                        Spacer()
+                        
+                        Text("\(completedDaysCount)/7 days")
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                    
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            // Background track
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.white.opacity(0.2))
+                                .frame(height: 6)
+                            
+                            // Progress fill
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.white)
+                                .frame(
+                                    width: geometry.size.width * (Double(completedDaysCount) / 7.0),
+                                    height: 6
+                                )
+                                .animation(.easeInOut(duration: 0.5), value: completedDaysCount)
+                        }
+                    }
+                    .frame(height: 6)
+                }
+            }
+            .padding(20)
         }
-        .padding()
-        .background(Color.appCardBackground)
-        .cornerRadius(16)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.appCardBorder, lineWidth: 1)
-        )
+        .cornerRadius(20)
+        .shadow(color: Color.black.opacity(0.1), radius: 15, x: 0, y: 8)
     }
     
-    // Week Days Header
-    private var weekDaysHeader: some View {
-        HStack(spacing: 0) {
-            ForEach(["S", "M", "T", "W", "T", "F", "S"], id: \.self) { day in
-                Text(day)
-                    .font(.caption.bold())
-                    .foregroundColor(.appTextTertiary)
-                    .frame(maxWidth: .infinity)
+    // Individual Day Circle for Gradient Card
+    private func dayCircleGradient(dayData: (day: String, date: Int, isCompleted: Bool)) -> some View {
+        ZStack {
+            Circle()
+                .fill(dayData.isCompleted ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                .frame(width: 40, height: 40)
+                .overlay(
+                    Circle().stroke(
+                        Color.white.opacity(dayData.isCompleted ? 0.8 : 0.3),
+                        lineWidth: dayData.isCompleted ? 2.5 : 1.5
+                    )
+                )
+            
+            if dayData.isCompleted {
+                Image(systemName: "bolt.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
+                    .foregroundColor(.white)
+            } else {
+                Text("\(dayData.date)")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.9))
             }
         }
+        .frame(width: 40, height: 40)
     }
     
-    // Week Days Grid
-    private var weekDaysGrid: some View {
-        HStack(spacing: 0) {
-            ForEach(weekDays, id: \.date) { dayData in
-                dayCircle(dayData: dayData)
-                    .frame(maxWidth: .infinity)
-            }
-        }
+    // Computed property for current streak
+    private var currentStreak: Int {
+        meterDataManager.meterData?.streak ?? 0
     }
     
+    // Computed property for completed days count
+    private var completedDaysCount: Int {
+        weekDays.filter { $0.isCompleted }.count
+    }
+    
+    // MARK: - Old Day Circle (kept for reference, can be removed)
     // Individual Day Circle
     private func dayCircle(dayData: (day: String, date: Int, isCompleted: Bool)) -> some View {
         VStack(spacing: 8) {
