@@ -101,10 +101,10 @@ class SubscriptionManager: ObservableObject {
     /// Works for BOTH first-time AND returning users automatically
     func identifyUserFromReceiptAfterPurchase() async throws {
         print("📱 Identifying user from receipt after purchase...")
-        
+
         // Get pending onboarding data (may be nil for returning users)
         let onboardingData = getPendingOnboardingData()
-        
+
         // Get original transaction ID from StoreKit
         guard let originalTransactionId = try await getCurrentOriginalTransactionId() else {
             throw NSError(
@@ -113,16 +113,35 @@ class SubscriptionManager: ObservableObject {
                 userInfo: [NSLocalizedDescriptionKey: "Could not get transaction ID from receipt"]
             )
         }
-        
-        // Call unified function (works for new AND returning users)
+
+        // ✅ NEW: If user is already signed in (anonymous), link receipt to existing account
+        if SupabaseManager.shared.isSignedIn, let userId = SupabaseManager.shared.userId {
+            print("🔗 [Receipt] User already signed in (anonymous), linking receipt to existing account")
+            print("   User ID: \(userId)")
+            print("   Receipt ID: \(originalTransactionId)")
+
+            try await SupabaseManager.shared.linkReceiptToExistingUser(
+                userId: userId,
+                originalTransactionId: originalTransactionId,
+                onboardingData: onboardingData
+            )
+
+            // Clear pending data
+            UserDefaults.standard.removeObject(forKey: "pendingOnboardingData")
+
+            print("✅ Receipt linked to existing anonymous user")
+            return
+        }
+
+        // ✅ Fallback: User not signed in, use receipt to create/identify user
         let result = try await SupabaseManager.shared.identifyUserFromReceipt(
             originalTransactionId: originalTransactionId,
             onboardingData: onboardingData
         )
-        
+
         // Clear pending data
         UserDefaults.standard.removeObject(forKey: "pendingOnboardingData")
-        
+
         if result.isNewUser {
             print("✅ New user account created from receipt. User ID: \(result.userId)")
         } else {

@@ -40,49 +40,47 @@ struct NeuroTwinIntroView: View {
             
             VStack(spacing: 0) {
                 Spacer()
-                    .frame(height: 80)
+                    .frame(height: 60)  // Reduced from 80
                 
                 // Phone mockup
                 PhoneMockupView()
-                    .frame(height: 380)
+                    .frame(height: 360)  // Reduced from 380
                     .scaleEffect(phoneAppeared ? 1.0 : 0.85)
                     .opacity(phoneAppeared ? 1.0 : 0)
                 
                 Spacer()
-                    .frame(height: 95)
+                    .frame(height: 50)  // Reduced from 95
                 
-                // Headline
+                // Headline - Responsive sizing
                 VStack(spacing: 4) {
                     Text("You've been brainwashed.")
-                        .font(.system(size: 30, weight: .bold))
-                        .tracking(0.2)
+                        .font(.system(size: 26, weight: .bold))  // Reduced from 32
+                        .tracking(0.3)
                         .foregroundColor(.appTextPrimary)
+                        .minimumScaleFactor(0.8)  // Scales down if needed
+                        .lineLimit(1)
                     
                     Text("Time to reverse it.")
-                        .font(.system(size: 30, weight: .bold))
-                        .tracking(0.2)
+                        .font(.system(size: 26, weight: .bold))  // Reduced from 32
+                        .tracking(0.3)
                         .foregroundColor(.appTextPrimary)
+                        .minimumScaleFactor(0.8)  // Scales down if needed
+                        .lineLimit(1)
                 }
+                .padding(.horizontal, 24)  // Prevent edge overflow
                 .opacity(textAppeared ? 1.0 : 0)
                 .offset(y: textAppeared ? 0 : 20)
                 
                 Spacer()
-                    .frame(minHeight: 40)
+                    .frame(minHeight: 30)  // Reduced from 40
                 
                 // Get Started Button & Terms
                 VStack(spacing: 16) {
-                    Button(action: onGetStarted) {
-                        Text("Get started")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(Color.black)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .background(Color.appAccent)
-                            .cornerRadius(16)
-                            .shadow(color: Color.appAccent.opacity(0.15), radius: 8, x: 0, y: 4)
+                    Button("Get started") {
+                        onGetStarted()
                     }
-                    .buttonStyle(ScaleButtonStyle())
-                    .padding(.horizontal, 28)
+                    .buttonStyle(OnboardingButtonStyle())
+                    .padding(.horizontal, 24)
                     
                     // Terms text
                     VStack(spacing: 2) {
@@ -91,20 +89,28 @@ struct NeuroTwinIntroView: View {
                             .foregroundColor(.appTextTertiary)
                         
                         HStack(spacing: 4) {
-                            Button(action: { /* Open terms */ }) {
+                            Button(action: {
+                                if let url = URL(string: "https://asymbaev.github.io/neurohack-legal/terms.html") {
+                                    UIApplication.shared.open(url)
+                                }
+                            }) {
                                 Text("Terms of Service")
                                     .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(Color(red: 0.4, green: 0.6, blue: 1.0))
+                                    .foregroundColor(.appAccent)
                             }
-                            
+
                             Text("and")
                                 .font(.system(size: 11))
                                 .foregroundColor(.appTextTertiary)
-                            
-                            Button(action: { /* Open privacy */ }) {
+
+                            Button(action: {
+                                if let url = URL(string: "https://asymbaev.github.io/neurohack-legal/privacy.html") {
+                                    UIApplication.shared.open(url)
+                                }
+                            }) {
                                 Text("Privacy Policy")
                                     .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(Color(red: 0.4, green: 0.6, blue: 1.0))
+                                    .foregroundColor(.appAccent)
                             }
                         }
                     }
@@ -132,7 +138,7 @@ struct NeuroTwinIntroView: View {
     }
 }
 
-// MARK: - Scale Button Style for tactile feedback
+// MARK: - Scale Button Style (for tactile feedback on buttons without full styling)
 struct ScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -152,8 +158,8 @@ struct PhoneMockupView: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            Color(red: 1.0, green: 0.85, blue: 0.7).opacity(0.4),
-                            Color(red: 1.0, green: 0.9, blue: 0.8).opacity(0.2),
+                            Color.appAccent.opacity(0.3),
+                            Color.appAccent.opacity(0.15),
                             Color.clear
                         ],
                         center: .center,
@@ -263,20 +269,47 @@ class VideoPlayerManager: ObservableObject {
     }
     
     private func setupPlayer() {
-        // Load the video file
-        guard let url = Bundle.main.url(forResource: "intro_video", withExtension: "mp4") else {
-            print("❌ Video file 'intro_video.mp4' not found in bundle")
+        // Try multiple possible video filenames and extensions (case-insensitive)
+        let possibleNames = [
+            "intro_video",
+            "intro-video",
+            "IntroVideo",
+            "onboarding_video",
+            "onboarding-video"
+        ]
+        
+        let possibleExtensions = ["mp4", "MP4", "mov", "MOV"]
+        
+        var videoURL: URL?
+        var foundName: String?
+        
+        for name in possibleNames {
+            for ext in possibleExtensions {
+                if let url = Bundle.main.url(forResource: name, withExtension: ext) {
+                    videoURL = url
+                    foundName = "\(name).\(ext)"
+                    break
+                }
+            }
+            if videoURL != nil { break }
+        }
+        
+        guard let url = videoURL else {
+            print("❌ Video file not found in bundle")
             print("📁 Bundle path: \(Bundle.main.bundlePath)")
+            print("🔍 Tried names: \(possibleNames.joined(separator: ", "))")
+            print("🔍 Tried extensions: \(possibleExtensions.joined(separator: ", "))")
             
-            // List all files in bundle for debugging
+            // List all video files in bundle for debugging
             if let resourcePath = Bundle.main.resourcePath {
-                let files = try? FileManager.default.contentsOfDirectory(atPath: resourcePath)
-                print("📂 Files in bundle: \(files?.prefix(10) ?? [])")
+                let files = (try? FileManager.default.contentsOfDirectory(atPath: resourcePath))?
+                    .filter { $0.hasSuffix(".mp4") || $0.hasSuffix(".MP4") || $0.hasSuffix(".mov") || $0.hasSuffix(".MOV") }
+                print("📂 Video files in bundle: \(files ?? [])")
             }
             return
         }
         
-        print("✅ Found video: intro_video.mp4")
+        print("✅ Found video: \(foundName!)")
         print("📹 Video URL: \(url)")
         
         // Create player item and queue player for seamless looping
@@ -288,10 +321,23 @@ class VideoPlayerManager: ObservableObject {
         
         queuePlayer.isMuted = true
         
-        // Ensure player is ready before playing
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            queuePlayer.play()
+        // Observe when player is ready to play
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemNewAccessLogEntry,
+            object: playerItem,
+            queue: .main
+        ) { _ in
+            print("📹 Video ready to play")
         }
+        
+        // Skip initial pause - start at 2 seconds in
+        let startTime = CMTime(seconds: 2.0, preferredTimescale: 600)
+        queuePlayer.seek(to: startTime)
+        
+        // Start playing at 2.5x speed for very fast-paced intro
+        queuePlayer.rate = 2.5
+        queuePlayer.play()
+        print("▶️ Video playback started at 2.5x speed (skipped 2s intro pause)")
         
         self.player = queuePlayer
     }

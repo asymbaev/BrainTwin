@@ -108,7 +108,9 @@ final class MeterDataManager: ObservableObject {
 
             isTodayHackComplete = response.isCompleted ?? false
 
-            print("✅ Today's hack preloaded: \(response.hackName)")
+            print("✅ [MeterDataManager] Today's hack STORED in cache!")
+            print("   todaysHack is now: \(todaysHack != nil ? "✅ AVAILABLE" : "❌ NIL")")
+            print("   Hack name: \(response.hackName)")
             print("   Completion status: \(isTodayHackComplete)")
             print("   Audio URLs: \(response.audioUrls?.count ?? 0) files")
 

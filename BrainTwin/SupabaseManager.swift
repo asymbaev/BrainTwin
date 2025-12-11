@@ -183,7 +183,43 @@ class SupabaseManager: ObservableObject {
     }
     
     // MARK: - Receipt-Based Authentication (UNIFIED)
-    
+
+    /// Links a receipt to an existing anonymous user and upgrades them to premium
+    /// Used when user creates anonymous account during onboarding, then purchases
+    func linkReceiptToExistingUser(userId: String, originalTransactionId: String, onboardingData: OnboardingData?) async throws {
+        print("🔗 Linking receipt to existing user...")
+
+        struct UpdatePayload: Encodable {
+            let original_transaction_id: String
+            let is_premium: Bool
+            let name: String?
+            let age: Int?
+            let goal: String?
+            let biggest_struggle: String?
+            let preferred_time: String?
+        }
+
+        let payload = UpdatePayload(
+            original_transaction_id: originalTransactionId,
+            is_premium: true,
+            name: onboardingData?.name,
+            age: onboardingData?.age,
+            goal: onboardingData?.goal,
+            biggest_struggle: onboardingData?.struggle,
+            preferred_time: onboardingData?.preferredTime
+        )
+
+        try await client
+            .from("users")
+            .update(payload)
+            .eq("id", value: userId)
+            .execute()
+
+        print("✅ Receipt linked! User upgraded to premium")
+        print("   User ID: \(userId)")
+        print("   Receipt: \(originalTransactionId)")
+    }
+
     /// Unified function: Identifies or creates user from Apple receipt
     /// Works for BOTH first-time users AND returning users
     func identifyUserFromReceipt(originalTransactionId: String, onboardingData: OnboardingData?) async throws -> (userId: String, isNewUser: Bool) {
@@ -240,19 +276,19 @@ class SupabaseManager: ObservableObject {
                 body: request
             )
         )
-        
+
         // Store userId locally
         self.userId = response.userId
         self.isSignedIn = true
-        
+
         let status = response.isNewUser ? "created" : "identified"
         print("✅ User \(status) from receipt. User ID: \(response.userId)")
-        
+
         if let userData = response.userData {
             print("   Name: \(userData.name ?? "Unknown")")
             print("   Premium: \(userData.is_premium ?? false)")
         }
-        
+
         return (userId: response.userId, isNewUser: response.isNewUser)
     }
     
@@ -473,17 +509,25 @@ class SupabaseManager: ObservableObject {
     
     /// Upload profile picture to Supabase Storage and save URL to database
     func uploadProfilePicture(_ image: UIImage) async throws -> String {
+        print("🔍 [SupabaseManager] uploadProfilePicture called")
+        print("🔍 [SupabaseManager] Current userId: \(userId ?? "nil")")
+
         guard let userId = userId else {
+            print("❌ [SupabaseManager] No user ID - cannot upload")
             throw NSError(domain: "SupabaseManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "No user ID"])
         }
-        
+
         // Compress image
         guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+            print("❌ [SupabaseManager] Failed to compress image")
             throw NSError(domain: "SupabaseManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to compress image"])
         }
-        
+
+        print("✅ [SupabaseManager] Image compressed: \(imageData.count) bytes")
+
         let fileName = "\(userId)/avatar.jpg"
-        
+        print("📤 [SupabaseManager] Uploading to path: \(fileName)")
+
         // Upload to Supabase Storage
         do {
             // Upload using Data directly (Supabase Swift SDK expects Data)
@@ -498,29 +542,39 @@ class SupabaseManager: ObservableObject {
                         upsert: true
                     )
                 )
-            
-            print("✅ Profile picture uploaded: \(fileName)")
+
+            print("✅ [SupabaseManager] Profile picture uploaded to storage: \(fileName)")
         } catch {
-            print("❌ Upload error: \(error)")
+            print("❌ [SupabaseManager] Storage upload error: \(error)")
+            print("❌ [SupabaseManager] Error type: \(type(of: error))")
+            print("❌ [SupabaseManager] Error localized: \(error.localizedDescription)")
             throw error
         }
-        
+
         // Get public URL
+        print("🔍 [SupabaseManager] Getting public URL...")
         let publicURL = try client.storage
             .from("profile-pictures")
             .getPublicURL(path: fileName)
-        
+
         let urlString = publicURL.absoluteString
-        
+        print("✅ [SupabaseManager] Public URL: \(urlString)")
+
         // Save URL to database
-        try await client
-            .from("users")
-            .update(["profile_picture_url": urlString])
-            .eq("id", value: userId)
-            .execute()
-        
-        print("✅ Profile picture URL saved to database: \(urlString)")
-        
+        print("💾 [SupabaseManager] Saving URL to database...")
+        do {
+            try await client
+                .from("users")
+                .update(["profile_picture_url": urlString])
+                .eq("id", value: userId)
+                .execute()
+
+            print("✅ [SupabaseManager] Profile picture URL saved to database: \(urlString)")
+        } catch {
+            print("❌ [SupabaseManager] Database update error: \(error)")
+            throw error
+        }
+
         return urlString
     }
     
@@ -550,4 +604,6 @@ class SupabaseManager: ObservableObject {
         let (data, _) = try await URLSession.shared.data(from: url)
         return UIImage(data: data)
     }
+    
+    
 }

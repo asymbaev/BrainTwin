@@ -3,8 +3,22 @@ import Combine
 import Supabase
 
 struct DashboardView: View {
-    @StateObject private var hackViewModel = DailyHackViewModel()
+    @StateObject private var hackViewModel: DailyHackViewModel
     @EnvironmentObject var meterDataManager: MeterDataManager
+
+    init() {
+        // ✅ CRITICAL: Initialize with pre-loaded hack for INSTANT display
+        let preloadedHack = MeterDataManager.shared.todaysHack
+        _hackViewModel = StateObject(wrappedValue: DailyHackViewModel(preloadedHack: preloadedHack))
+
+        print("🚀 [Dashboard Init] ==================")
+        print("   MeterDataManager.todaysHack: \(MeterDataManager.shared.todaysHack != nil ? "✅ AVAILABLE" : "❌ NIL")")
+        print("   Preloaded hack: \(preloadedHack != nil ? "✅ YES" : "❌ NO")")
+        if let hack = preloadedHack {
+            print("   Hack name: \(hack.hackName)")
+        }
+        print("==================")
+    }
     @Environment(\.colorScheme) var colorScheme // Moved here as per instruction
     
     // Appearance override (System/Light/Dark)
@@ -110,6 +124,26 @@ struct DashboardView: View {
                 
                 // This will use cached hack data if available (see DailyHackViewModel)
                 await hackViewModel.loadTodaysHack()
+                
+                // ✅ NEW: Restore profile picture if missing (e.g. after reinstall)
+                if profileImageData == nil {
+                    print("🔍 [Dashboard] No local profile picture. Checking backend...")
+                    do {
+                        if let urlString = try await SupabaseManager.shared.fetchProfilePictureURL() {
+                            if let image = try await SupabaseManager.shared.downloadProfilePicture(from: urlString) {
+                                if let data = image.jpegData(compressionQuality: 0.8) {
+                                    profileImageData = data
+                                    profileImage = image
+                                    print("✅ [Dashboard] Restored profile picture from backend")
+                                }
+                            }
+                        } else {
+                            print("ℹ️ [Dashboard] No profile picture found in backend")
+                        }
+                    } catch {
+                        print("❌ [Dashboard] Failed to restore profile picture: \(error)")
+                    }
+                }
             }
             .refreshable {
                 await meterDataManager.fetchMeterData(force: true)
@@ -131,6 +165,13 @@ struct DashboardView: View {
             }
             .onChange(of: meterDataManager.isTodayHackComplete) { _ in
                 generateWeekData()
+            }
+            // ✅ NEW: Watch for profile image changes (immediate sync)
+            .onChange(of: profileImageData) { newData in
+                if let data = newData, let image = UIImage(data: data) {
+                    profileImage = image
+                    print("✅ [Dashboard] Profile image updated immediately")
+                }
             }
         }
         .fullScreenCover(isPresented: $showListenMode) {
@@ -246,22 +287,17 @@ struct DashboardView: View {
     
     // Hack Card - Background Image
     private var hackCardBackground: some View {
-        AsyncImage(url: URL(string: ImageService.getTodaysImage())) { phase in
-            if case .success(let image) = phase {
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                // Fallback gradient
-                LinearGradient(
-                    colors: colorScheme == .dark
-                        ? [Color(white: 0.08), Color(white: 0.04)]
-                        : [Color(hex: "#FFE7D6"), Color(hex: "#FFF8F0")],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
+        CachedAsyncImage(url: ImageService.getTodaysImage()) {
+            // Fallback gradient (only shown if image not cached)
+            LinearGradient(
+                colors: colorScheme == .dark
+                    ? [Color(white: 0.08), Color(white: 0.04)]
+                    : [Color(hex: "#FFE7D6"), Color(hex: "#FFF8F0")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         }
+        .aspectRatio(contentMode: .fill)
         .frame(height: 200)
         .clipped()
     }

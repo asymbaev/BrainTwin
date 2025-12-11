@@ -105,14 +105,21 @@ struct ContentView: View {
     // This is what Instagram, TikTok, Spotify do - load during transitions!
     private func prefetchDataForReturningUser() async {
         print("📦 [Pre-fetch] Starting parallel data loading...")
-        
+
         // MeterDataManager now fetches BOTH meter data AND complete hack data in parallel
         // This single call loads everything we need for the dashboard
         await MeterDataManager.shared.fetchMeterData(force: false)
-        
+
+        // ✅ NEW: Pre-download audio files for instant Listen mode
+        if let audioUrls = MeterDataManager.shared.todaysHack?.audioUrls, !audioUrls.isEmpty {
+            print("🎵 [Pre-fetch] Pre-downloading \(audioUrls.count) audio files for instant playback...")
+            await AudioCacheManager.shared.preDownloadAudioFiles(audioUrls)
+        }
+
         print("🎉 [Pre-fetch] All data pre-loaded! MainTabView will render instantly.")
         print("   ✓ Meter data: \(MeterDataManager.shared.meterData != nil ? "ready" : "failed")")
         print("   ✓ Today's hack: \(MeterDataManager.shared.todaysHack != nil ? "ready" : "failed")")
+        print("   ✓ Audio files: \(MeterDataManager.shared.todaysHack?.audioUrls?.count ?? 0) cached")
     }
     
     private var loadingView: some View {

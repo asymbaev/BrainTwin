@@ -36,8 +36,10 @@ class DailyHackViewModel: ObservableObject {
            Date().timeIntervalSince(lastFetch) < 300 {  // Cache valid for 5 minutes
             
             print("⚡️ Using pre-fetched hack (loaded during animation) - INSTANT!")
+            print("🔍 [DEBUG] Cached hack isCompleted: \(cachedHack.isCompleted ?? false)")
             todaysHack = cachedHack
             hasMarkedComplete = cachedHack.isCompleted ?? false
+            print("🔍 [DEBUG] hasMarkedComplete set to: \(hasMarkedComplete)")
             
             // Use cached meter data for progress
             if let cachedMeter = meterManager.meterData {
@@ -85,8 +87,10 @@ class DailyHackViewModel: ObservableObject {
             )
             
             hasMarkedComplete = response.isCompleted ?? false
-            
+
             print("✅ Hack loaded from backend")
+            print("🔍 [DEBUG] Backend returned isCompleted: \(response.isCompleted ?? false)")
+            print("🔍 [DEBUG] hasMarkedComplete set to: \(hasMarkedComplete)")
             
             // Get today's progress for display
             let meterResponse: MeterResponse = try await supabase.client.functions.invoke(
@@ -103,8 +107,23 @@ class DailyHackViewModel: ObservableObject {
     }
     
     func markAsComplete() async {
-        guard let userId = supabase.userId, !hasMarkedComplete else { return }
-        
+        print("🔵 [DEBUG] markAsComplete() called")
+        print("   userId: \(supabase.userId ?? "nil")")
+        print("   hasMarkedComplete: \(hasMarkedComplete)")
+
+        guard let userId = supabase.userId else {
+            print("❌ [DEBUG] No user ID - ABORTING")
+            return
+        }
+
+        guard !hasMarkedComplete else {
+            print("⚠️ [DEBUG] Already marked complete - SKIPPING")
+            print("   This hack was loaded as isCompleted=true from backend!")
+            return
+        }
+
+        print("✅ [DEBUG] Proceeding with completion...")
+
         do {
             let today = ISO8601DateFormatter().string(from: Date()).split(separator: "T")[0]
             let now = ISO8601DateFormatter().string(from: Date())
@@ -115,7 +134,7 @@ class DailyHackViewModel: ObservableObject {
             
             let update = UpdateTask(completed_at: now)
             
-            // Step 1: Mark the daily task as complete
+            // Step 1: Mark the daily task as complete in database
             try await supabase.client
                 .from("daily_tasks")
                 .update(update)
@@ -123,18 +142,27 @@ class DailyHackViewModel: ObservableObject {
                 .eq("date", value: String(today))
                 .execute()
             
-            print("✅ Daily task marked complete!")
+            print("✅ Daily task marked complete in DB!")
             
+            // Step 2: IMMEDIATELY update local state (don't wait for refetch)
             hasMarkedComplete = true
+            await MainActor.run {
+                MeterDataManager.shared.isTodayHackComplete = true
+            }
+            print("✅ Local completion state updated immediately")
             
-            // ✅ NEW: Save completion date for check-in logic
+            // Step 3: Save completion date for check-in logic
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
             let todayString = formatter.string(from: Date())
             UserDefaults.standard.set(todayString, forKey: "lastHackCompletionDate")
             print("✅ Saved completion date: \(todayString)")
             
-            // Step 2: Call calculate-meter to update rewire progress
+            // Step 4: Wait briefly for backend consistency (Supabase replication)
+            try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            print("⏱️ Waited for backend consistency...")
+            
+            // Step 5: Refetch meter data to get updated progress/streak
             struct MeterRequest: Encodable {
                 let userId: String
             }
@@ -152,16 +180,23 @@ class DailyHackViewModel: ObservableObject {
             print("   Skill: \(meterResponse.skillLevel)")
             print("   Streak: \(meterResponse.streak) days")
             
-            // Step 3: CRITICAL FIX - Force refresh MeterDataManager
+            // Step 6: Force refresh MeterDataManager with new data
             await MeterDataManager.shared.fetchMeterData(force: true)
+            print("🔄 MeterDataManager refreshed with latest data")
             
-            // Step 4: Notify Dashboard to refresh
-            NotificationCenter.default.post(name: Notification.Name("RefreshDashboard"), object: nil)
-            
-            print("🔄 Dashboard refresh triggered!")
+            // Step 7: FINALLY - Notify Dashboard to refresh UI
+            await MainActor.run {
+                NotificationCenter.default.post(name: Notification.Name("RefreshDashboard"), object: nil)
+            }
+            print("📢 Dashboard refresh notification sent!")
             
         } catch {
             print("❌ Mark complete error: \(error)")
+            // Rollback local state on error
+            hasMarkedComplete = false
+            await MainActor.run {
+                MeterDataManager.shared.isTodayHackComplete = false
+            }
         }
     }
     

@@ -33,6 +33,8 @@ class PaywallEventDelegate: SuperwallDelegate {
         case .paywallOpen:
             print("👁️ Paywall opened!")
             startDiscountTimer()
+            // ✅ Hack generation now happens earlier during "Did You Know?" screen in onboarding
+            // No need to generate here anymore!
 
         case .paywallClose(_), .paywallDecline(_):
             cancelDiscountTimer()
@@ -61,22 +63,27 @@ class PaywallEventDelegate: SuperwallDelegate {
         case .transactionComplete:
             print("✅ Purchase completed!")
             cancelDiscountTimer()
-            
+
             Task {
-                // ✅ NEW: Unified identify function
+                // ✅ Try to identify user, but don't block on failure
                 do {
                     try await SubscriptionManager.shared.identifyUserFromReceiptAfterPurchase()
                     print("✅ User identified from receipt")
                 } catch {
                     print("❌ Failed to identify user from receipt: \(error)")
-                    return
+                    print("⚠️ Will retry identification from OnboardingView...")
+                    // ✅ DON'T RETURN - continue to post notification so OnboardingView can handle retry
                 }
-                
+
                 await SubscriptionManager.shared.refreshSubscription()
-                
+
+                // ✅ Hack generation already completed during "Did You Know?" screen
+                print("✅ Hack should already be generated from earlier in onboarding!")
+
+                // ✅ ALWAYS post notification, even if initial identification failed
                 print("📣 Posting purchase completion notification...")
                 NotificationCenter.default.post(name: .purchaseCompleted, object: nil)
-                
+
                 await trackPaywallNudge(converted: true)
             }
 

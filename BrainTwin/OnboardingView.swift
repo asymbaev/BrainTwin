@@ -7,7 +7,8 @@ struct OnboardingView: View {
     @Binding var isOnboardingComplete: Bool
     @State private var showProfileSetup = false
     @State private var isProcessingPurchase = false  // ✅ Show loading after purchase
-    @State private var showNameCollection = false  // ✅ NEW: Show name collection after purchase
+    @State private var showCelebration = false  // ✅ NEW: Show celebration after purchase
+    @State private var showNameCollection = false  // ✅ NEW: Show name collection after celebration
     @State private var userName: String = ""  // ✅ NEW: Store user's name
     
     @AppStorage("appearanceMode") private var appearanceMode = "system"
@@ -77,9 +78,9 @@ struct OnboardingView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // Progress indicator - NOW 15 STEPS
+                // Progress indicator - NOW 16 STEPS (0-15)
                 HStack(spacing: 8) {
-                    ForEach(0..<15, id: \.self) { index in
+                    ForEach(0..<16, id: \.self) { index in
                         Capsule()
                             .fill(index <= viewModel.currentStep ? Color.appAccentGradient : LinearGradient(colors: [Color.appTextTertiary], startPoint: .leading, endPoint: .trailing))
                             .frame(height: 4)
@@ -146,8 +147,14 @@ struct OnboardingView: View {
                 }
                 .transition(.opacity)
             }
-            
-            // ✅ NEW: Show name collection after purchase processing
+
+            // ✅ NEW: Show celebration after purchase processing
+            if showCelebration {
+                celebrationView
+                    .transition(.opacity)
+            }
+
+            // ✅ Show name collection after celebration
             if showNameCollection {
                 nameCollectionView
                     .transition(.opacity)
@@ -156,35 +163,16 @@ struct OnboardingView: View {
         .onReceive(NotificationCenter.default.publisher(for: .purchaseCompleted)) { _ in
             // Purchase completed! Show loading immediately, then process
             print("🎉 Purchase notification received!")
-            
+
             // ✅ IMMEDIATELY show loading state (no delay)
             withAnimation(.easeInOut(duration: 0.3)) {
                 isProcessingPurchase = true
             }
             print("⏳ [Onboarding] isProcessingPurchase = true")
-            
-            // Process in background
+
+            // Process in background with retry logic
             Task {
-                await checkIfUserSubscribed()
-                
-                print("✅ [Onboarding] checkIfUserSubscribed completed")
-                
-                // ✅ After processing, show name collection instead of completing
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    print("🎯 [Onboarding] About to show name collection...")
-                    print("   isProcessingPurchase: \(isProcessingPurchase)")
-                    print("   showNameCollection: \(showNameCollection)")
-                    print("   isOnboardingComplete: \(isOnboardingComplete)")
-                    
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        isProcessingPurchase = false
-                        showNameCollection = true
-                    }
-                    
-                    print("✅ [Onboarding] Name collection should now be visible!")
-                    print("   isProcessingPurchase: \(isProcessingPurchase)")
-                    print("   showNameCollection: \(showNameCollection)")
-                }
+                await processPostPurchaseWithRetry()
             }
         }
     }
@@ -426,6 +414,64 @@ struct OnboardingView: View {
         }
     }
 
+    /// Process post-purchase flow with retry logic for user creation
+    private func processPostPurchaseWithRetry() async {
+        print("🔄 [Onboarding] Starting post-purchase processing with retry...")
+
+        let maxRetries = 3
+        var attempt = 0
+        var userCreated = false
+
+        // Retry user identification up to 3 times with exponential backoff
+        while attempt < maxRetries && !userCreated {
+            attempt += 1
+            print("🔄 [Onboarding] User creation attempt \(attempt)/\(maxRetries)...")
+
+            // Check if user was already created
+            if SupabaseManager.shared.userId != nil {
+                print("✅ [Onboarding] User ID exists: \(SupabaseManager.shared.userId!)")
+                userCreated = true
+                break
+            }
+
+            // Try to create user from receipt
+            do {
+                try await SubscriptionManager.shared.identifyUserFromReceiptAfterPurchase()
+                print("✅ [Onboarding] User created successfully on attempt \(attempt)")
+                userCreated = true
+            } catch {
+                print("❌ [Onboarding] User creation failed on attempt \(attempt): \(error.localizedDescription)")
+
+                if attempt < maxRetries {
+                    // Exponential backoff: 2s, 4s, 8s
+                    let delay = TimeInterval(pow(2.0, Double(attempt)))
+                    print("⏳ [Onboarding] Waiting \(delay)s before retry...")
+                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                }
+            }
+        }
+
+        // Check final status
+        await SubscriptionManager.shared.refreshSubscription()
+
+        let hasUserId = SupabaseManager.shared.userId != nil
+        let isSubscribed = SubscriptionManager.shared.isSubscribed
+
+        print("📊 [Onboarding] Post-purchase status:")
+        print("   User created: \(userCreated)")
+        print("   Has user ID: \(hasUserId)")
+        print("   Is subscribed: \(isSubscribed)")
+
+        // Show celebration and continue flow
+        await MainActor.run {
+            print("🎉 [Onboarding] Showing celebration screen...")
+            withAnimation(.easeInOut(duration: 0.3)) {
+                isProcessingPurchase = false
+                showCelebration = true
+            }
+        }
+    }
+
     private func completeOnboarding() {
         isOnboardingComplete = true
         UserDefaults.standard.set(true, forKey: "justCompletedOnboarding")
@@ -436,11 +482,18 @@ struct OnboardingView: View {
     private var screen0_WelcomeIntro: some View {
         VStack(spacing: 0) {
             // App name - cleaner, smaller
-            Text("NeuroHack")
-                .font(.system(size: 22, weight: .semibold))
-                .tracking(1.0)
-                .foregroundColor(.appTextPrimary)
-                .padding(.top, 32)
+            HStack(spacing: 0) {
+                Text("Neuro")
+                    .tracking(1.0)
+                    .foregroundColor(Color(red: 1.0, green: 0.6, blue: 0.2)) // Warm orange
+                Text("⚡")
+                    .tracking(1.0)
+                Text("Hack")
+                    .tracking(1.0)
+                    .foregroundColor(.appAccent) // Gold
+            }
+            .font(.system(size: 22, weight: .semibold))
+            .padding(.top, 32)
 
             Spacer()
 
@@ -1069,6 +1122,23 @@ struct OnboardingView: View {
             .padding(.top, 12)  // ✅ Reduced from 16 to 12
             .padding(.bottom, 40)
         }
+        .onAppear {
+            // ✅ OPTIMIZATION: Create anonymous account early
+            // This gives us a user ID so we can generate hack later
+            Task {
+                guard !SupabaseManager.shared.isSignedIn else {
+                    print("ℹ️ [GoalSelection] User already signed in, skipping anonymous sign-in")
+                    return
+                }
+
+                do {
+                    try await SupabaseManager.shared.signInAnonymously()
+                    print("✅ [GoalSelection] Anonymous account created! User ID: \(SupabaseManager.shared.userId ?? "nil")")
+                } catch {
+                    print("❌ [GoalSelection] Failed to create anonymous account: \(error)")
+                }
+            }
+        }
         .sheet(isPresented: $showCustomGoalSheet) {
             CustomInputBottomSheet(
                 title: "What's your goal?",
@@ -1116,10 +1186,11 @@ struct OnboardingView: View {
                     .foregroundColor(.appTextSecondary)
             }
             .padding(.bottom, 20)
+            
+            Spacer()
 
-            // Struggle Options - Scrollable
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 12) {
+            // Struggle Options - VStack for better spacing
+            VStack(spacing: 12) {
                 StruggleOptionButton(
                     title: "I have negative self-talk",
                     isSelected: viewModel.selectedStruggle == "I have negative self-talk",
@@ -1180,7 +1251,8 @@ struct OnboardingView: View {
                 }
             }
             .padding(.horizontal)
-            }
+            
+            Spacer()
 
             // Continue Button - Fixed at bottom
             Button("Continue") {
@@ -1306,6 +1378,33 @@ struct OnboardingView: View {
             .padding(.top, 12)
             .padding(.bottom, 40)
         }
+        .onAppear {
+            // ✅ OPTIMIZATION: Start generating hack + audio IN BACKGROUND
+            // User is reading facts - perfect time to generate!
+            // By the time they finish onboarding + paywall, hack will be ready
+            Task.detached {
+                guard await SupabaseManager.shared.isSignedIn else {
+                    print("⚠️ [DidYouKnow] Cannot generate hack - user not signed in")
+                    return
+                }
+
+                print("🚀 [DidYouKnow] Starting hack generation in background...")
+                await MeterDataManager.shared.fetchMeterData(force: true)
+                print("✅ [DidYouKnow] Hack generation completed!")
+
+                // ✅ Pre-download audio files while user is still on screens
+                if let audioUrls = await MeterDataManager.shared.todaysHack?.audioUrls, !audioUrls.isEmpty {
+                    print("🎵 [DidYouKnow] Pre-downloading \(audioUrls.count) audio files...")
+                    await AudioCacheManager.shared.preDownloadAudioFiles(audioUrls)
+                    print("✅ [DidYouKnow] Audio files cached!")
+                }
+                
+                // ✅ Pre-download today's hero image for dashboard
+                print("🖼️ [DidYouKnow] Pre-downloading dashboard hero image...")
+                await ImageCacheManager.shared.prefetchImage(from: ImageService.getTodaysImage())
+                print("✅ [DidYouKnow] Dashboard image cached!")
+            }
+        }
     }
 
     // MARK: - Screen 7: Generating Plan (Loading Animation)
@@ -1370,6 +1469,8 @@ struct OnboardingView: View {
             }
         )
     }
+
+    // MARK: - Screen 13: Rating Screen
 
     // MARK: - Screen 13: Rating Screen
 
@@ -1664,6 +1765,248 @@ struct StruggleOptionButton: View {
     }
 }
 
+// MARK: - Celebration View
+
+extension OnboardingView {
+    private var celebrationView: some View {
+        ZStack {
+            // Background - Warm onboarding palette
+            Color.appBackground.ignoresSafeArea()
+            
+            // Subtle warm gradient overlay matching intro screen
+            RadialGradient(
+                colors: [
+                    Color.appAccent.opacity(0.05),
+                    Color.clear
+                ],
+                center: .top,
+                startRadius: 0,
+                endRadius: 400
+            )
+            .ignoresSafeArea()
+
+            // ✨ REALISTIC CONFETTI ANIMATION
+            CelebrationConfettiView()
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer()
+
+                // Celebration message
+                VStack(spacing: 24) {
+                    Text("Congrats!")
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(.appTextPrimary)
+                        .multilineTextAlignment(.center)
+
+                    Text("You just rewired your future")
+                        .font(.title2.bold())
+                        .foregroundColor(.appAccent)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+
+                    Text("Neuroplasticity kicks in with daily micro-actions.\nYou're about to hack your brain's default settings.")
+                        .font(.body)
+                        .foregroundColor(.appTextSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                        .padding(.top, 8)
+                }
+
+                Spacer()
+
+                // Continue button with gradient
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showCelebration = false
+                        showNameCollection = true
+                    }
+                } label: {
+                    Text("Continue")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(Color.appAccentGradient)
+                        .cornerRadius(16)
+                        .shadow(color: Color.appAccent.opacity(0.3), radius: 12)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 40)
+                .padding(.bottom, 40)
+            }
+        }
+        .onAppear {
+            // Celebration haptics
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+        }
+    }
+}
+
+// MARK: - Celebration Confetti Animation View
+
+enum ConfettiShapeType {
+    case rectangle
+    case circle
+    case ribbon
+}
+
+struct CelebrationConfettiView: View {
+    @State private var confettiPieces: [CelebrationConfettiPiece] = []
+    @State private var animationTimer: Timer?
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                ForEach(confettiPieces) { piece in
+                    CelebrationConfettiShape(shapeType: piece.shapeType)
+                        .fill(piece.color)
+                        .frame(width: piece.width, height: piece.height)
+                        .rotationEffect(.degrees(piece.rotation))
+                        .position(x: piece.x, y: piece.y)
+                        .opacity(piece.opacity)
+                }
+            }
+            .onAppear {
+                startConfetti(in: geometry.size)
+            }
+            .onDisappear {
+                animationTimer?.invalidate()
+            }
+        }
+    }
+
+    private func startConfetti(in size: CGSize) {
+        // Warm color palette matching onboarding theme
+        let colors: [Color] = [
+            Color(red: 1.0, green: 0.84, blue: 0.0),  // Gold
+            Color(red: 1.0, green: 0.6, blue: 0.2),   // Warm orange
+            Color(red: 1.0, green: 0.8, blue: 0.4),   // Light gold
+            Color(red: 1.0, green: 0.5, blue: 0.3),   // Coral
+            Color(red: 1.0, green: 0.7, blue: 0.5),   // Peach
+            Color(red: 1.0, green: 0.9, blue: 0.6),   // Champagne
+        ]
+        
+        let shapeTypes: [ConfettiShapeType] = [.rectangle, .circle, .ribbon]
+
+        // Generate 100 confetti pieces for a fuller effect, starting from all over the screen
+        for i in 0..<100 {
+            let shapeType = shapeTypes.randomElement() ?? .rectangle
+            let baseSize = CGFloat.random(in: 10...16)
+            
+            // Ribbons are longer
+            let width = shapeType == .ribbon ? baseSize * 0.5 : baseSize
+            let height = shapeType == .ribbon ? baseSize * 2.5 : baseSize
+            
+            let piece = CelebrationConfettiPiece(
+                id: UUID(),
+                x: CGFloat.random(in: 0...size.width),
+                y: CGFloat.random(in: -size.height * 0.3...size.height * 0.3), // Start from top and center of screen
+                width: width,
+                height: height,
+                velocityX: CGFloat.random(in: -15...15), // Slower horizontal movement
+                velocityY: CGFloat.random(in: 20...50), // Much slower initial fall speed
+                angularVelocity: Double.random(in: -90...90), // Slower rotation
+                color: colors.randomElement() ?? .appAccent,
+                rotation: Double.random(in: 0...360),
+                shapeType: shapeType,
+                flutterOffset: CGFloat.random(in: 0...100),
+                opacity: 1.0
+            )
+            confettiPieces.append(piece)
+        }
+        
+        // Start physics simulation
+        startPhysicsAnimation(screenSize: size)
+    }
+
+    private func startPhysicsAnimation(screenSize: CGSize) {
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 1/60.0, repeats: true) { _ in
+            for i in 0..<confettiPieces.count {
+                var piece = confettiPieces[i]
+                
+                // Physics constants - SLOWED DOWN for visibility
+                let gravity: CGFloat = 0.8 // Reduced from 2.0 for slower fall
+                let airResistance: CGFloat = 0.995 // Less resistance = more natural movement
+                let flutterSpeed: CGFloat = 0.08 // Slower flutter for more graceful sway
+                
+                // Apply gravity
+                piece.velocityY += gravity
+                
+                // Apply air resistance
+                piece.velocityX *= airResistance
+                piece.velocityY *= airResistance
+                
+                // Add horizontal flutter/sway (sine wave motion)
+                piece.flutterOffset += flutterSpeed
+                let flutter = sin(piece.flutterOffset) * 3.0 // Wider sway
+                
+                // Update position
+                piece.x += piece.velocityX + flutter
+                piece.y += piece.velocityY
+                
+                // Update rotation (tumbling effect)
+                piece.rotation += piece.angularVelocity / 60.0
+                
+                // Only fade out after confetti goes well below the screen
+                if piece.y > screenSize.height + 200 {
+                    piece.opacity = max(0, piece.opacity - 0.02) // Slower fade
+                }
+                
+                confettiPieces[i] = piece
+            }
+            
+            // Remove fully transparent pieces for performance
+            confettiPieces.removeAll { $0.opacity <= 0 }
+            
+            // Stop timer when all confetti is gone
+            if confettiPieces.isEmpty {
+                animationTimer?.invalidate()
+            }
+        }
+    }
+}
+
+struct CelebrationConfettiPiece: Identifiable {
+    let id: UUID
+    var x: CGFloat
+    var y: CGFloat
+    let width: CGFloat
+    let height: CGFloat
+    var velocityX: CGFloat
+    var velocityY: CGFloat
+    var angularVelocity: Double
+    let color: Color
+    var rotation: Double
+    let shapeType: ConfettiShapeType
+    var flutterOffset: CGFloat
+    var opacity: Double
+}
+
+struct CelebrationConfettiShape: Shape {
+    let shapeType: ConfettiShapeType
+    
+    func path(in rect: CGRect) -> Path {
+        switch shapeType {
+        case .rectangle:
+            return Path { path in
+                path.addRect(rect)
+            }
+        case .circle:
+            return Path { path in
+                path.addEllipse(in: rect)
+            }
+        case .ribbon:
+            return Path { path in
+                path.addRoundedRect(in: rect, cornerSize: CGSize(width: rect.width / 3, height: rect.width / 3))
+            }
+        }
+    }
+}
+
 // MARK: - Name Collection View
 
 extension OnboardingView {
@@ -1920,20 +2263,53 @@ struct GeneratingPlanView: View {
         Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
             if progress < 33 {
                 progress += 1
+                
+                // Milestone haptics - every 20%
+                if Int(progress) % 20 == 0 {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
             } else if progress < 34 {
-                // Switch to message 2
+                // Switch to message 2 - special haptic combo
                 currentMessage = messages[1]
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
                 progress += 1
             } else if progress < 66 {
                 progress += 1
+                
+                // Milestone haptics - every 20%
+                if Int(progress) % 20 == 0 {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
             } else if progress < 67 {
-                // Switch to message 3
+                // Switch to message 3 - special haptic combo
                 currentMessage = messages[2]
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
                 progress += 1
             } else if progress < 100 {
                 progress += 1
+                
+                // Milestone haptics - every 20%
+                if Int(progress) % 20 == 0 {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
             } else {
                 timer.invalidate()
+                
+                // 100% completion - TRIPLE CELEBRATION!
+                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                }
+                
                 // Complete - advance to next screen
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     onComplete()
@@ -2303,10 +2679,76 @@ struct LifeWithHacksView: View {
 
 // MARK: - Rating View
 
+// MARK: - Rating View
+
 struct RatingView: View {
     let onContinue: (Int) -> Void
 
     @State private var selectedRating: Int = 5  // Default to 5 stars
+    
+    // Animation State
+    @State private var animatedText1 = ""
+    @State private var animatedText2 = ""
+    @State private var showLightning = false
+    @State private var isAnimatingText1 = false
+    @State private var isAnimatingText2 = false
+    @State private var animationCompleted = false
+    
+    private let fullText1 = "Made for people like you"
+    private let fullText2 = "Your transformation starts now"
+    private let typingDelay: TimeInterval = 0.05
+
+    private func startRatingAnimation() {
+        guard !isAnimatingText1 && !isAnimatingText2 else { return }
+        
+        animatedText1 = ""
+        animatedText2 = ""
+        isAnimatingText1 = true
+        
+        // Start first line
+        typeNextCharacter(isLine1: true, index: 0)
+    }
+    
+    private func typeNextCharacter(isLine1: Bool, index: Int) {
+        let fullText = isLine1 ? fullText1 : fullText2
+        
+        if index >= fullText.count {
+            if isLine1 {
+                // Finished Line 1 -> Start Line 2
+                isAnimatingText1 = false
+                isAnimatingText2 = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self.typeNextCharacter(isLine1: false, index: 0)
+                }
+            } else {
+                // Finished Line 2 -> Show Lightning
+                isAnimatingText2 = false
+                animationCompleted = true
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                    showLightning = true
+                }
+            }
+            return
+        }
+        
+        let endIndex = fullText.index(fullText.startIndex, offsetBy: index + 1)
+        let substring = String(fullText[..<endIndex])
+        
+        if isLine1 {
+            animatedText1 = substring
+        } else {
+            animatedText2 = substring
+        }
+        
+        // Haptic feedback every 3 chars
+        if index % 3 == 0 {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + typingDelay) {
+            self.typeNextCharacter(isLine1: isLine1, index: index + 1)
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -2314,113 +2756,93 @@ struct RatingView: View {
             Color.appBackground
                 .ignoresSafeArea()
 
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 24) {
-                    Spacer().frame(height: 8)
-
-                    // Title
-                    Text("Give us a rating")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(.appTextPrimary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-
-                    // Star rating card
-                    VStack(spacing: 16) {
-                        HStack(spacing: 16) {
-                            ForEach(1...5, id: \.self) { index in
-                                Button {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                        selectedRating = index
-                                    }
-                                } label: {
-                                    Image(systemName: index <= selectedRating ? "star.fill" : "star")
-                                        .font(.system(size: 36))
-                                        .foregroundColor(.white)
-                                        .overlay(
-                                            Color.appAccentGradient
-                                                .mask(
-                                                    Image(systemName: index <= selectedRating ? "star.fill" : "star")
-                                                        .font(.system(size: 36))
-                                                )
-                                        )
-                                }
-                                .scaleEffect(index == selectedRating ? 1.1 : 1.0)
-                                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedRating)
-                            }
-                        }
-                        .padding(.vertical, 24)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .background(Color.clear)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.appCardBorder, lineWidth: 1)
-                    )
-                    .cornerRadius(16)
+            VStack(spacing: 0) {
+                Spacer()
+                
+                // Title
+                Text("Give us a rating")
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(.appTextPrimary)
+                    .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
 
-                    // "Made for people like you"
+                Spacer()
+                
+                // Star rating card
+                VStack(spacing: 16) {
+                    HStack(spacing: 16) {
+                        ForEach(1...5, id: \.self) { index in
+                            Button {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    selectedRating = index
+                                }
+                            } label: {
+                                Image(systemName: index <= selectedRating ? "star.fill" : "star")
+                                    .font(.system(size: 36))
+                                    .foregroundColor(.white)
+                                    .overlay(
+                                        Color.appAccentGradient
+                                            .mask(
+                                                Image(systemName: index <= selectedRating ? "star.fill" : "star")
+                                                    .font(.system(size: 36))
+                                            )
+                                    )
+                            }
+                            .scaleEffect(index == selectedRating ? 1.1 : 1.0)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedRating)
+                        }
+                    }
+                    .padding(.vertical, 24)
+                }
+                .frame(maxWidth: .infinity)
+                .background(Color.clear)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.appCardBorder, lineWidth: 1)
+                )
+                .cornerRadius(16)
+                .padding(.horizontal, 32)
+
+                Spacer()
+                
+                // "Made for people like you"
+                VStack(spacing: 16) {
+                    // Line 1: Made for people like you
                     Text("Made for people like you")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.appTextPrimary)
-
-                    // Avatar row
-                    HStack(spacing: -12) {
-                        Image("avatarAlex")
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 56, height: 56)
-                            .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.appBackground, lineWidth: 3))
-                            .zIndex(3)
-
-                        Image("avatarMaya")
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 56, height: 56)
-                            .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.appBackground, lineWidth: 3))
-                            .zIndex(2)
-
-                        Image("avatarAnna")
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 56, height: 56)
-                            .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.appBackground, lineWidth: 3))
-                            .zIndex(1)
-                    }
-
-                    // Caption
-                    Text("+12,000 people started their rewiring journey")
-                        .font(.system(size: 14))
-                        .foregroundColor(.appTextSecondary)
-
-                    // Testimonials
-                    VStack(spacing: 16) {
-                        TestimonialCard(
-                            avatarImage: "avatarSima",
-                            name: "Sabrina",
-                            testimonial: "Tiny daily hacks have helped me stay more consistent than ever."
+                        .foregroundColor(.clear) // Placeholder for layout
+                        .overlay(
+                            Text(animatedText1)
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(.appTextPrimary)
+                                .animation(nil, value: animatedText1)
                         )
-
-                        TestimonialCard(
-                            avatarImage: "avatarYen",
-                            name: "Adam",
-                            testimonial: "I feel calmer and more focused throughout my day."
+                    
+                    // Line 2: Your transformation starts now
+                    Text("Your transformation starts now")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.clear) // Placeholder for layout
+                        .overlay(
+                            Text(animatedText2)
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.appTextSecondary)
+                                .animation(nil, value: animatedText2)
                         )
+                    
+                    // Lightning Emoji - Hero element
+                    if showLightning {
+                        Text("⚡️")
+                            .font(.system(size: 72))
+                            .shadow(color: .appAccent.opacity(0.5), radius: 20, x: 0, y: 0)
+                            .padding(.top, 16)
+                            .transition(.scale.combined(with: .opacity))
                     }
-                    .padding(.horizontal, 24)
-
-                    Spacer().frame(height: 8)
                 }
-            }
+                .padding(.top, 8)
 
-            // Bottom button
-            VStack {
                 Spacer()
-
+                
+                // Bottom button
                 Button {
                     onContinue(selectedRating)
                 } label: {
@@ -2429,6 +2851,16 @@ struct RatingView: View {
                 .buttonStyle(OnboardingButtonStyle())
                 .padding(.horizontal, 24)
                 .padding(.bottom, 50)
+            }
+            .onAppear {
+                if !animationCompleted {
+                    startRatingAnimation()
+                } else {
+                    // Show final state if already completed
+                    animatedText1 = fullText1
+                    animatedText2 = fullText2
+                    showLightning = true
+                }
             }
         }
     }
@@ -2820,27 +3252,51 @@ struct UnlockableCard: View {
         .scaleEffect(cardScale)
         .onTapGesture {
             if isReady && !isUnlocked {
+                // Initial tap - light haptic for immediate feedback
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 onTap()
             }
         }
         .onChange(of: isUnlocked) { oldValue, newValue in
             if newValue {
+                // Immediate scale + glow
                 withAnimation(.easeOut(duration: 0.15)) {
                     cardScale = 1.03
                     glowOpacity = 0.8
                 }
 
+                // Flip animation
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                     flipRotation = 180
                 }
-
+                
+                // Premium haptic sequence - Sophisticated Unlock Pattern
+                // Echo haptic - quick double-tap feel
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
+                
+                // Scale back
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                         cardScale = 1.0
                     }
                 }
+                
+                // Midpoint haptic - card is perpendicular during flip
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                }
+                
+                // Settling haptic - card approaching final position
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.40) {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
 
+                // Final haptics + glow fade - card locked in place
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
                     withAnimation(.easeOut(duration: 0.25)) {
                         glowOpacity = 0
                     }
@@ -2872,6 +3328,8 @@ struct UnlockCardsView: View {
             Color.appBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
+                Spacer()
+                
                 // Header
                 VStack(spacing: 8) {
                     Text("Here's the good news...")
@@ -2884,7 +3342,8 @@ struct UnlockCardsView: View {
                         .foregroundColor(.appTextSecondary)
                         .multilineTextAlignment(.center)
                 }
-                .padding(.bottom, 24)
+                
+                Spacer()
 
                 // Cards - NO PADDING, cards constrain themselves
                 VStack(spacing: 16) {
@@ -2940,7 +3399,7 @@ struct UnlockCardsView: View {
                         .opacity(bothCardsUnlocked ? 1.0 : 0.5)
                 }
                 .disabled(!bothCardsUnlocked)
-                .padding(.bottom, 40)
+                .padding(.bottom, 50)
             }
             .padding(.top, 24)
         }
@@ -3543,14 +4002,24 @@ struct UhOhAnimationView: View {
         .onAppear {
             // Trigger animations - "Uh oh" first, then subtitle
             showUhOh = true
-
-            // Delay subtitle appearance
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                showSubtitle = true
+            
+            // BOOM - Dramatic thunder haptic when "Uh oh" appears
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            
+            // Echo/aftershock
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
 
-            // Auto-advance to next screen after animations complete
+            // Delay subtitle appearance + haptic
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                showSubtitle = true
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            }
+
+            // Auto-advance to next screen after animations complete + success haptic
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
                 onSkip()
             }
         }

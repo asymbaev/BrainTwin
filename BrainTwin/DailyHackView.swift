@@ -95,14 +95,13 @@ struct DailyHackView: View {
             if autoPlayVoice {
                 audioPlayer?.stop()
                 isPlaying = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    readCurrentPage()
-                }
+                // ✅ Play immediately - cache is checked inside downloadAndCache
+                readCurrentPage()
             }
         }
         .onAppear {
             print("📱 DailyHackView appeared - autoPlayVoice: \(autoPlayVoice)")
-            
+
             do {
                 try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
                 try AVAudioSession.sharedInstance().setActive(true)
@@ -112,24 +111,23 @@ struct DailyHackView: View {
             }
 
             if autoPlayVoice {
-                print("🎧 Will auto-play in 0.5s")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    print("▶️ Calling readCurrentPage()")
-                    readCurrentPage()
-                }
+                // ✅ Play immediately - AudioCacheManager handles cache check internally
+                print("▶️ Starting audio playback...")
+                readCurrentPage()
             }
         }
         .onDisappear {
             audioPlayer?.stop()
             audioPlayer = nil
             
+            // ✅ FIXED: Await completion before dismissing
+            // This ensures backend updates finish before dashboard refreshes
             if currentPage >= 2 && !viewModel.hasMarkedComplete {
                 Task {
                     await viewModel.markAsComplete()
+                    // Note: markAsComplete() will post RefreshDashboard when done
                 }
             }
-            
-            NotificationCenter.default.post(name: Notification.Name("RefreshDashboard"), object: nil)
         }
     }
     
@@ -200,9 +198,12 @@ struct DailyHackView: View {
             }
             .padding(.bottom, 120)
         }
-        .confirmationDialog("Select Voice", isPresented: $showVoiceSelector, titleVisibility: .visible) {
-            ForEach(0..<availableVoices.count, id: \.self) { index in
-                Button(availableVoices[index].name) {
+        .sheet(isPresented: $showVoiceSelector) {
+            VoiceSelectorView(
+                selectedVoiceIndex: $selectedVoiceIndex,
+                isPresented: $showVoiceSelector,
+                voices: availableVoices,
+                onVoiceSelected: { index in
                     selectedVoiceIndex = index
                     audioPlayer?.stop()
                     audioPlayer = nil
@@ -213,10 +214,9 @@ struct DailyHackView: View {
                         await regenerateWithNewVoice()
                     }
                 }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Switching voice will regenerate audio")
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.hidden)
         }
     }
     
@@ -239,9 +239,8 @@ struct DailyHackView: View {
     private func replaySpeech() {
         audioPlayer?.stop()
         isPlaying = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            fetchAndPlayAudio()
-        }
+        // ✅ Replay immediately - cache handled internally
+        fetchAndPlayAudio()
     }
     
     // MARK: - Audio Functions
@@ -347,17 +346,8 @@ struct DailyHackView: View {
     }
     
     private func downloadAudio(from urlString: String) async throws -> Data {
-        guard let url = URL(string: urlString) else {
-            throw URLError(.badURL)
-        }
-        
-        let (data, response) = try await URLSession.shared.data(from: url)
-        
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw URLError(.badServerResponse)
-        }
-        
-        return data
+        // ✅ Use AudioCacheManager for instant cached playback
+        return try await AudioCacheManager.shared.downloadAndCache(urlString)
     }
     
     private func regenerateWithNewVoice() async {

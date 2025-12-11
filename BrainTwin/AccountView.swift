@@ -5,10 +5,12 @@ struct AccountView: View {
     @Environment(\.colorScheme) var colorScheme
     
     @AppStorage("appearanceMode") private var appearanceMode = "system"
-    
+    @AppStorage("profileImageData") private var profileImageData: Data?  // ✅ Persistent storage
+
     @State private var showImagePicker = false
     @State private var avatarImage: UIImage?
     @State private var showSubscription = false
+    @State private var showAbout = false
     
     private var preferredColorScheme: ColorScheme? {
         switch appearanceMode {
@@ -111,7 +113,7 @@ struct AccountView: View {
                             tint: .appTextSecondary,
                             showChevron: true
                         ) {
-                            // TODO
+                            showAbout = true
                         }
                     }
                     .padding(.horizontal, 20)
@@ -148,10 +150,66 @@ struct AccountView: View {
         .navigationBarTitleDisplayMode(.inline)
         .preferredColorScheme(preferredColorScheme)
         .sheet(isPresented: $showImagePicker) {
-            ImagePicker(image: $avatarImage)
+            ProfileImagePicker { image in
+                print("🔍 [AccountView] Image selected, starting save process...")
+                print("🔍 [AccountView] Current userId: \(SupabaseManager.shared.userId ?? "nil")")
+
+                // Save image locally first (for immediate display)
+                if let imageData = image.jpegData(compressionQuality: 0.8) {
+                    profileImageData = imageData
+                    avatarImage = image
+                    print("✅ [AccountView] Saved profile image to AppStorage (size: \(imageData.count) bytes)")
+                } else {
+                    print("❌ [AccountView] Failed to compress image to JPEG")
+                    return
+                }
+
+                // Upload to Supabase in background
+                Task {
+                    print("📤 [AccountView] Starting upload to Supabase...")
+                    do {
+                        let url = try await SupabaseManager.shared.uploadProfilePicture(image)
+                        print("✅ [AccountView] Profile picture uploaded to Supabase: \(url)")
+                    } catch {
+                        print("❌ [AccountView] Failed to upload profile picture: \(error)")
+                        print("❌ [AccountView] Error details: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+        .onAppear {
+            // Load saved profile image from AppStorage
+            if let imageData = profileImageData, let image = UIImage(data: imageData) {
+                avatarImage = image
+                print("✅ [AccountView] Loaded profile image from AppStorage")
+            }
+        }
+        .task {
+            // Fetch profile picture from Supabase on first load if not in AppStorage
+            if profileImageData == nil {
+                print("🔍 [AccountView] No local profile picture. Checking backend...")
+                do {
+                    if let urlString = try await SupabaseManager.shared.fetchProfilePictureURL() {
+                        if let image = try await SupabaseManager.shared.downloadProfilePicture(from: urlString) {
+                            if let data = image.jpegData(compressionQuality: 0.8) {
+                                profileImageData = data
+                                avatarImage = image
+                                print("✅ [AccountView] Restored profile picture from backend")
+                            }
+                        }
+                    } else {
+                        print("ℹ️ [AccountView] No profile picture found in backend")
+                    }
+                } catch {
+                    print("❌ [AccountView] Failed to restore profile picture: \(error)")
+                }
+            }
         }
         .navigationDestination(isPresented: $showSubscription) {
             SubscriptionView()
+        }
+        .navigationDestination(isPresented: $showAbout) {
+            AboutView()
         }
         // ⚡️ Strong, obvious grounding at the bottom — blur + gradient + top separator
         .overlay(alignment: .bottom) {

@@ -65,16 +65,16 @@ struct AboutView: View {
                             linkItem(
                                 icon: "doc.text.fill",
                                 title: "Privacy Policy",
-                                url: "https://braintwin.app/privacy"
+                                url: "https://asymbaev.github.io/neurohack-legal/privacy.html"
                             )
-                            
+
                             Divider()
                                 .padding(.leading, 60)
-                            
+
                             linkItem(
                                 icon: "doc.plaintext.fill",
                                 title: "Terms of Service",
-                                url: "https://braintwin.app/terms"
+                                url: "https://asymbaev.github.io/neurohack-legal/terms.html"
                             )
                             
                             Divider()

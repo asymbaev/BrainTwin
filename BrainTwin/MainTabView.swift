@@ -108,13 +108,17 @@ struct MainTabView: View {
         }
         .task {
             print("📱 MainTabView loaded - checking cache...")
-            await meterDataManager.fetchMeterData()
+
+            // Pre-fetch all data in parallel for best performance
+            async let meterData: Void = meterDataManager.fetchMeterData()
+            async let hackData: Void = hackViewModel.loadTodaysHack()
+            async let imageData: Void = ImageCacheManager.shared.prefetchImage(from: ImageService.getTodaysImage())
+
+            // Wait for all to complete
+            _ = await (meterData, hackData, imageData)
+
+            // Determine check-in flow after data is loaded
             await determineCheckInFlow()
-            
-            Task {
-                await hackViewModel.loadTodaysHack()
-            }
-            
             await fetchCompletedCount()
         }
     }
