@@ -1,9 +1,12 @@
 import SwiftUI
 import SuperwallKit
 import UIKit
+import CoreMotion
+import Combine
 
 struct OnboardingView: View {
     @StateObject private var viewModel = OnboardingViewModel()
+    @StateObject private var motionManager = MotionManager() // Tracks device motion for parallax cards
     @Binding var isOnboardingComplete: Bool
     @State private var showProfileSetup = false
     @State private var isProcessingPurchase = false  // ✅ Show loading after purchase
@@ -45,6 +48,9 @@ struct OnboardingView: View {
     
     @State private var hasAnimatedStep0 = false
     
+    // MARK: - Transaction Namespace
+    @Namespace private var animation // ✅ NEW: For Morph Transitions
+    
     // MARK: - Typewriter config
     private let welcomeTypingDelay: TimeInterval = 0.06   // faster
     private let quoteTypingDelay: TimeInterval = 0.045    // faster
@@ -82,39 +88,70 @@ struct OnboardingView: View {
                 HStack(spacing: 8) {
                     ForEach(0..<16, id: \.self) { index in
                         Capsule()
-                            .fill(index <= viewModel.currentStep ? Color.appAccentGradient : LinearGradient(colors: [Color.appTextTertiary], startPoint: .leading, endPoint: .trailing))
+                            .fill(index <= viewModel.currentStep ? Color.appAccentGradient : LinearGradient(colors: [Color.appTextTertiary.opacity(0.3)], startPoint: .leading, endPoint: .trailing))
                             .frame(height: 4)
                     }
                 }
-                .padding()
+                .padding(.horizontal, 24)
+                .padding(.top, 8) // Slight top breathing room
                 
                 // Content
-                TabView(selection: $viewModel.currentStep) {
-                    screen0_WelcomeIntro.tag(0)
-                    screen0_5_ValueProp.tag(1)         // Value proposition
-                    screen0_75_MoodCheck.tag(2)        // Mood check (NeuroMeter Slider)
-                    screen2_GoalSelection.tag(3)       // Goal selection after mood
-                    screen1_AgeCollection.tag(4)       // Age selection (no name screen)
-                    screen3_StruggleSelection.tag(5)   // Struggle selection
-                    screen_DidYouKnow.tag(6)           // Did you know? facts
-                    screen_GeneratingPlan.tag(7)       // Loading/generating plan
-                    screen_UhOh.tag(8)                 // Uh Oh animation screen
-                    screen_FeedbackStats.tag(9)        // Personalized feedback based on mood + struggle
-                    screen_UnlockCards.tag(10)         // Unlock solution cards - moved before graphs
-                    screen_LifeWithoutHacks.tag(11)    // Red graph declining - life without hacks
-                    screen_LifeWithHacks.tag(12)       // Green graph rising - life with hacks
-                    screen_Rating.tag(13)              // Rating screen
-                    screen_NotificationPermission.tag(14)  // Notification permission
-                    screen_Commitment.tag(15)          // Commitment screen (before paywall)
+                // Content
+                ZStack {
+                    switch viewModel.currentStep {
+                    case 0:
+                        screen0_WelcomeIntro
+                            .transition(.opacity)
+                    case 1:
+                        screen0_5_ValueProp
+                            .transition(.opacity)
+                    case 2:
+                        screen0_75_MoodCheck
+                            .transition(.opacity)
+                    case 3:
+                        screen2_GoalSelection
+                            .transition(.opacity) // Will be custom later
+                    case 4:
+                        screen1_AgeCollection
+                            .transition(.opacity) // Will be custom later
+                    case 5:
+                        screen3_StruggleSelection
+                            .transition(.opacity) // Will be custom later
+                    case 6:
+                        screen_DidYouKnow
+                            .transition(.opacity)
+                    case 7:
+                        screen_GeneratingPlan
+                            .transition(.opacity)
+                    case 8:
+                        screen_UhOh
+                            .transition(.opacity)
+                    case 9:
+                        screen_FeedbackStats
+                            .transition(.opacity)
+                    case 10:
+                        screen_UnlockCards
+                            .transition(.opacity)
+                    case 11:
+                        screen_LifeWithoutHacks
+                            .transition(.opacity)
+                    case 12:
+                        screen_LifeWithHacks
+                            .transition(.opacity)
+                    case 13:
+                        screen_Rating
+                            .transition(.opacity)
+                    case 14:
+                        screen_NotificationPermission
+                            .transition(.opacity)
+                    case 15:
+                        screen_Commitment
+                            .transition(.opacity)
+                    default:
+                        EmptyView()
+                    }
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .disabled(false) // Allows button interaction
-                .onAppear {
-                    UIScrollView.appearance().isScrollEnabled = false
-                }
-                .onDisappear {
-                    UIScrollView.appearance().isScrollEnabled = true
-                }
+                .animation(.easeInOut(duration: 0.35), value: viewModel.currentStep) // Smooth transition animation
             }
             .onChange(of: showProfileSetup) { newValue in
                 if newValue {
@@ -323,6 +360,23 @@ struct OnboardingView: View {
 
 
     
+    // MARK: - Helpers
+    
+    /// Triggers haptic feedback and advances to the next step with a slight delay
+    private func advanceWithHaptic(to step: Int) {
+        // Haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.prepare()
+        generator.impactOccurred()
+        
+        // Small delay for visual feedback before transition
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation {
+                viewModel.currentStep = step
+            }
+        }
+    }
+
     // MARK: - Paywall (Age-based routing)
     @State private var paywallAttempts = 0
     
@@ -481,19 +535,22 @@ struct OnboardingView: View {
     
     private var screen0_WelcomeIntro: some View {
         VStack(spacing: 0) {
-            // App name - cleaner, smaller
-            HStack(spacing: 0) {
-                Text("Neuro")
-                    .tracking(1.0)
-                    .foregroundColor(Color(red: 1.0, green: 0.6, blue: 0.2)) // Warm orange
-                Text("⚡")
-                    .tracking(1.0)
-                Text("Hack")
-                    .tracking(1.0)
-                    .foregroundColor(.appAccent) // Gold
+            // Back arrow to return to intro
+            HStack {
+                Button {
+                    // No back action on first screen
+                } label: {
+                    EmptyView()
+                }
+                Spacer()
             }
-            .font(.system(size: 22, weight: .semibold))
-            .padding(.top, 32)
+            
+            // Logo from Screenshot 1 (Gold Flower Loop)
+            Image("NeuroHackLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 120)
+                .padding(.top, 24)
 
             Spacer()
 
@@ -577,15 +634,19 @@ struct OnboardingView: View {
         }
     }
     
-    // MARK: - Screen 0.5: Value Proposition (NEW)
+    // MARK: - Screen 0.5: Value Proposition (Momentum)
     
     private var screen0_5_ValueProp: some View {
         VStack(spacing: 0) {
+            OnboardingBackButton(action: {
+                withAnimation {
+                    viewModel.currentStep = 0
+                }
+            })
+
             Spacer()
 
-            // Centered group: icon + text
             VStack(spacing: 32) {
-                // Lightning icon - animated entrance
                 if showValueIcon {
                     Text("⚡")
                         .font(.system(size: 64))
@@ -593,7 +654,6 @@ struct OnboardingView: View {
                 }
 
                 VStack(spacing: 24) {
-                    // --- HEADLINE --- Typewriter
                     Text(fullValueHeadline)
                         .font(.system(size: 36, weight: .bold))
                         .tracking(0.5)
@@ -610,7 +670,6 @@ struct OnboardingView: View {
                         )
                         .padding(.horizontal, 32)
 
-                    // --- SUBTEXT --- Typewriter
                     Text(fullValueSubtext)
                         .font(.system(size: 17, weight: .regular))
                         .multilineTextAlignment(.center)
@@ -643,7 +702,6 @@ struct OnboardingView: View {
         }
         .onAppear {
             if valuePropTypewriterCompleted {
-                // Already completed - show final state
                 showValueIcon = true
                 animatedValueHeadline = fullValueHeadline
                 animatedValueSubtext = fullValueSubtext
@@ -659,24 +717,11 @@ struct OnboardingView: View {
     
     private var screen0_75_MoodCheck: some View {
         VStack(spacing: 0) {
-            // Back button
-            HStack {
-                Button {
-                    withAnimation {
-                        viewModel.currentStep = 1
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                    .foregroundColor(.appTextPrimary)
+            OnboardingBackButton(action: {
+                withAnimation {
+                    viewModel.currentStep = 1
                 }
-                Spacer()
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 24)
+            })
             
             Spacer()
             
@@ -723,6 +768,7 @@ struct OnboardingView: View {
                             y: 0
                         )
                 }
+                .frame(width: 140, height: 140) // Ensure stable layout size
                 .scaleEffect(0.85 + (moodLevel * 0.25))
                 .animation(.spring(response: 0.4, dampingFraction: 0.85), value: moodLevel)
                 
@@ -777,12 +823,7 @@ struct OnboardingView: View {
                                             if !hasInteractedWithSlider {
                                                 hasInteractedWithSlider = true
                                                 
-                                                // Pulse animation for continue button
-                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                                                        showContinuePulse = true
-                                                    }
-                                                }
+
                                             }
                                             
                                             // Update ViewModel's selectedMood based on slider position
@@ -825,20 +866,9 @@ struct OnboardingView: View {
             .buttonStyle(OnboardingButtonStyle())
             .disabled(!hasInteractedWithSlider)
             .opacity(hasInteractedWithSlider ? 1 : 0.5)
-            .scaleEffect(showContinuePulse ? 1.05 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showContinuePulse)
             .padding(.horizontal, 24)
             .padding(.bottom, 40)
-            .onAppear {
-                // Reset pulse after animation completes
-                if showContinuePulse {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        withAnimation {
-                            showContinuePulse = false
-                        }
-                    }
-                }
-            }
+
         }
         .onAppear {
             // Initialize slider to middle position on first appear
@@ -900,32 +930,24 @@ struct OnboardingView: View {
 
     private var screen1_AgeCollection: some View {
         VStack(spacing: 0) {
-            // Back button
-            HStack {
-                Button {
-                    withAnimation {
-                        viewModel.currentStep = 3  // Back to goal selection
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                    .foregroundColor(.appTextPrimary)
+            // Check spacing - reliance on global progress bar
+            
+            OnboardingBackButton(action: {
+                withAnimation {
+                    viewModel.currentStep = 3
                 }
-                Spacer()
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 12)  // ✅ Reduced from 20 to 12
+            })
 
-            // Lightning icon - consistent with goal screen
+            Spacer()
+
+            // Lightning icon
             Text("⚡")
                 .font(.system(size: 64))
-                .padding(.bottom, 12)  // ✅ Reduced from 16 to 12
+                .matchedGeometryEffect(id: "lightning", in: animation) // Shared Element
+                .padding(.bottom, 24)
 
             // Header
-            VStack(spacing: 12) {
+            VStack(spacing: 16) {
                 Text("How old are you?")
                     .font(.title.bold())
                     .foregroundColor(.appTextPrimary)
@@ -935,44 +957,62 @@ struct OnboardingView: View {
                     .font(.subheadline)
                     .foregroundColor(.appTextSecondary)
             }
-            .padding(.bottom, 20)  // ✅ Reduced from 24 to 20
+            .padding(.bottom, 32)
 
             // Age Range Options
             VStack(spacing: 12) {
                 AgeRangeButton(
                     title: "Under 18",
                     isSelected: viewModel.selectedAgeRange == "Under 18",
-                    action: { viewModel.selectAgeRange("Under 18") }
+                    action: { 
+                        viewModel.selectAgeRange("Under 18")
+                        advanceWithHaptic(to: 5)
+                    }
                 )
 
                 AgeRangeButton(
                     title: "18-24",
                     isSelected: viewModel.selectedAgeRange == "18-24",
-                    action: { viewModel.selectAgeRange("18-24") }
+                    action: { 
+                        viewModel.selectAgeRange("18-24")
+                        advanceWithHaptic(to: 5)
+                    }
                 )
 
                 AgeRangeButton(
                     title: "25-34",
                     isSelected: viewModel.selectedAgeRange == "25-34",
-                    action: { viewModel.selectAgeRange("25-34") }
+                    action: { 
+                        viewModel.selectAgeRange("25-34")
+                        advanceWithHaptic(to: 5)
+                    }
                 )
 
                 AgeRangeButton(
                     title: "35-44",
                     isSelected: viewModel.selectedAgeRange == "35-44",
-                    action: { viewModel.selectAgeRange("35-44") }
+                    action: { 
+                        viewModel.selectAgeRange("35-44")
+                        advanceWithHaptic(to: 5)
+                    }
                 )
 
                 AgeRangeButton(
                     title: "45-54",
                     isSelected: viewModel.selectedAgeRange == "45-54",
-                    action: { viewModel.selectAgeRange("45-54") }
+                    action: { 
+                        viewModel.selectAgeRange("45-54")
+                        advanceWithHaptic(to: 5)
+                    }
                 )
 
                 AgeRangeButton(
                     title: "55+",
                     isSelected: viewModel.selectedAgeRange == "55+",
-                    action: { viewModel.selectAgeRange("55+") }
+                    action: { 
+                        viewModel.selectAgeRange("55+")
+                        advanceWithHaptic(to: 5)
+                    }
                 )
             }
             .padding(.horizontal)
@@ -980,17 +1020,8 @@ struct OnboardingView: View {
             Spacer()
 
             // Continue Button
-            Button("Continue") {
-                withAnimation {
-                    viewModel.currentStep = 5  // Go to struggle selection
-                }
-            }
-            .buttonStyle(OnboardingButtonStyle())
-            .disabled(viewModel.selectedAgeRange.isEmpty)
-            .opacity(viewModel.selectedAgeRange.isEmpty ? 0.5 : 1)
-            .padding(.horizontal, 24)
-            .padding(.top, 12)  // ✅ Reduced from 16 to 12
-            .padding(.bottom, 40)
+            Spacer()
+                .frame(height: 20)
         }
     }
 
@@ -998,129 +1029,121 @@ struct OnboardingView: View {
     
     private var screen2_GoalSelection: some View {
         VStack(spacing: 0) {
-            // Back button
-            HStack {
-                Button {
-                    withAnimation {
-                        viewModel.currentStep = 2  // Back to mood check
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
+            OnboardingBackButton(action: {
+                withAnimation {
+                    viewModel.currentStep = 2
+                }
+            })
+
+            Spacer()
+
+            // Lightning icon - consistent with other screens
+            Text("⚡")
+                .font(.system(size: 64))
+                .matchedGeometryEffect(id: "lightning", in: animation) // Shared Element
+                .padding(.bottom, 24) // Increased for premium feel
+
+            // Header
+            VStack(spacing: 16) { // Increased spacing
+                Text("What's your main goal?")
+                    .font(.title.bold())
                     .foregroundColor(.appTextPrimary)
-                }
-                Spacer()
+                    .multilineTextAlignment(.center)
+
+                Text("Your hacks will be designed for this")
+                    .font(.subheadline)
+                    .foregroundColor(.appTextSecondary)
             }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 12)  // ✅ Reduced from 20 to 12
+            .padding(.bottom, 32) // Increased breathing room
 
-            // ✅ Centered content group
-            VStack(spacing: 0) {
-                // Lightning icon - matching Value Prop screen
-                Text("⚡")
-                    .font(.system(size: 64))
-                    .padding(.bottom, 12)  // ✅ Reduced from 16 to 12
-
-                // Header
-                VStack(spacing: 12) {
-                    Text("What's your main goal?")
-                        .font(.title.bold())
-                        .foregroundColor(.appTextPrimary)
-                        .multilineTextAlignment(.center)
-
-                    Text("Your hacks will be designed for this")
-                        .font(.subheadline)
-                        .foregroundColor(.appTextSecondary)
-                }
-                .padding(.bottom, 20)  // ✅ Reduced from 24 to 20
-
-                // Goal Options - Scrollable
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 12) {
+            // Goal Options - Compact list
+            VStack(spacing: 12) {
                 GoalOptionButton(
                     title: "Succeed at my current mission",
                     isSelected: viewModel.selectedGoal == "Succeed at my current mission",
-                    action: { viewModel.selectGoal("Succeed at my current mission") }
+                    action: { 
+                        viewModel.selectGoal("Succeed at my current mission")
+                        advanceWithHaptic(to: 4)
+                    }
                 )
 
                 GoalOptionButton(
                     title: "Rewire my brain to unlock potential",
                     isSelected: viewModel.selectedGoal == "Rewire my brain to unlock potential",
-                    action: { viewModel.selectGoal("Rewire my brain to unlock potential") }
+                    action: { 
+                        viewModel.selectGoal("Rewire my brain to unlock potential")
+                        advanceWithHaptic(to: 4)
+                    }
                 )
 
                 GoalOptionButton(
                     title: "Think outside the box",
                     isSelected: viewModel.selectedGoal == "Think outside the box",
-                    action: { viewModel.selectGoal("Think outside the box") }
+                    action: { 
+                        viewModel.selectGoal("Think outside the box")
+                        advanceWithHaptic(to: 4)
+                    }
                 )
 
                 GoalOptionButton(
                     title: "Attract luck or happiness",
                     isSelected: viewModel.selectedGoal == "Attract luck or happiness",
-                    action: { viewModel.selectGoal("Attract luck or happiness") }
+                    action: { 
+                        viewModel.selectGoal("Attract luck or happiness")
+                        advanceWithHaptic(to: 4)
+                    }
                 )
 
                 GoalOptionButton(
                     title: "Learn manifesting",
                     isSelected: viewModel.selectedGoal == "Learn manifesting",
-                    action: { viewModel.selectGoal("Learn manifesting") }
+                    action: { 
+                        viewModel.selectGoal("Learn manifesting")
+                        advanceWithHaptic(to: 4)
+                    }
                 )
 
-                // Custom Goal Option
-                VStack(alignment: .leading, spacing: 8) {
-                    Button {
-                        viewModel.selectedGoal = "custom"
-                        showCustomGoalSheet = true
-                    } label: {
-                        HStack {
-                            Text("Other - Set custom goal")
-                                .font(.body)
-                                .foregroundColor(.appTextPrimary)
+                // Custom Goal Option - Inline Compact Style
+                Button {
+                    viewModel.selectedGoal = "custom"
+                    showCustomGoalSheet = true
+                } label: {
+                    HStack {
+                        Text("Other - Set custom goal")
+                            .font(.system(.subheadline, design: .default).bold()) // Compact bold font
+                            .foregroundColor(.appTextPrimary)
 
-                            Spacer()
+                        Spacer()
 
-                            // Checkmark when selected, empty circle when not
-                            ZStack {
+                        // Radio button style
+                        ZStack {
+                            Circle()
+                                .strokeBorder(viewModel.selectedGoal == "custom" ? Color.appAccent : Color.appTextTertiary, lineWidth: 1.5) // 1.5 border width
+                                .frame(width: 20, height: 20) // Smaller radio circle
+
+                            if viewModel.selectedGoal == "custom" {
                                 Circle()
-                                    .strokeBorder(Color.appCardBorder, lineWidth: 2)
-                                    .frame(width: 24, height: 24)
-
-                                if viewModel.selectedGoal == "custom" {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundColor(.appAccent)
-                                }
+                                    .fill(Color.appAccent)
+                                    .frame(width: 10, height: 10)
                             }
                         }
-                        .padding()
-                        .background(Color.clear)  // Transparent background
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(viewModel.selectedGoal == "custom" ? Color.appAccentGradient : LinearGradient(colors: [Color.appCardBorder], startPoint: .leading, endPoint: .trailing), lineWidth: viewModel.selectedGoal == "custom" ? 2 : 1)
-                        )
                     }
+                    .padding(.vertical, 16) // Increased vertical padding
+                    .padding(.horizontal, 16)
+                    .background(Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(viewModel.selectedGoal == "custom" ? AnyShapeStyle(Color.appAccentGradient) : AnyShapeStyle(Color.appTextTertiary), lineWidth: viewModel.selectedGoal == "custom" ? 2 : 1.5) // 1.5 width
+                    )
                 }
             }
             .padding(.horizontal)
-            }
-            }  // ✅ End of centered content group
+
+            Spacer()
 
             // Continue Button - Fixed at bottom
-            Button("Continue") {
-                withAnimation {
-                    viewModel.currentStep = 4  // Go to name collection
-                }
-            }
-            .buttonStyle(OnboardingButtonStyle())
-            .disabled(!viewModel.isGoalValid)
-            .opacity(viewModel.isGoalValid ? 1 : 0.5)
-            .padding(.horizontal, 24)
-            .padding(.top, 12)  // ✅ Reduced from 16 to 12
-            .padding(.bottom, 40)
+            Spacer()
+                .frame(height: 20)
         }
         .onAppear {
             // ✅ OPTIMIZATION: Create anonymous account early
@@ -1146,36 +1169,31 @@ struct OnboardingView: View {
                 text: $viewModel.customGoalText
             )
         }
+        .onChange(of: showCustomGoalSheet) { isPresented in
+            if !isPresented && viewModel.selectedGoal == "custom" && !viewModel.customGoalText.isEmpty {
+                advanceWithHaptic(to: 4)
+            }
+        }
     }
     
     private var screen3_StruggleSelection: some View {
         VStack(spacing: 0) {
-            // Back button
-            HStack {
-                Button {
-                    withAnimation {
-                        viewModel.currentStep = 4  // Back to age collection
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                    .foregroundColor(.appTextPrimary)
+            OnboardingBackButton(action: {
+                withAnimation {
+                    viewModel.currentStep = 4
                 }
-                Spacer()
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
+            })
+
+            Spacer()
 
             // Lightning icon - consistent with other screens
             Text("⚡")
                 .font(.system(size: 64))
-                .padding(.bottom, 12)
+                .matchedGeometryEffect(id: "lightning", in: animation) // Shared Element
+                .padding(.bottom, 24)
 
             // Header
-            VStack(spacing: 12) {
+            VStack(spacing: 16) {
                 Text("What holds you back?")
                     .font(.title.bold())
                     .foregroundColor(.appTextPrimary)
@@ -1185,34 +1203,55 @@ struct OnboardingView: View {
                     .font(.subheadline)
                     .foregroundColor(.appTextSecondary)
             }
-            .padding(.bottom, 20)
+            .padding(.bottom, 32)
             
-            Spacer()
+
 
             // Struggle Options - VStack for better spacing
             VStack(spacing: 12) {
                 StruggleOptionButton(
                     title: "I have negative self-talk",
                     isSelected: viewModel.selectedStruggle == "I have negative self-talk",
-                    action: { viewModel.selectStruggle("I have negative self-talk") }
+                    action: { 
+                        viewModel.selectStruggle("I have negative self-talk")
+                        advanceWithHaptic(to: 6)
+                    }
                 )
 
                 StruggleOptionButton(
                     title: "I tend to overreact to everything",
                     isSelected: viewModel.selectedStruggle == "I tend to overreact to everything",
-                    action: { viewModel.selectStruggle("I tend to overreact to everything") }
+                    action: { 
+                        viewModel.selectStruggle("I tend to overreact to everything")
+                        advanceWithHaptic(to: 6)
+                    }
                 )
 
                 StruggleOptionButton(
                     title: "I take everything too seriously",
                     isSelected: viewModel.selectedStruggle == "I take everything too seriously",
-                    action: { viewModel.selectStruggle("I take everything too seriously") }
+                    action: { 
+                        viewModel.selectStruggle("I take everything too seriously")
+                        advanceWithHaptic(to: 6)
+                    }
                 )
 
                 StruggleOptionButton(
                     title: "I have low self-esteem",
                     isSelected: viewModel.selectedStruggle == "I have low self-esteem",
-                    action: { viewModel.selectStruggle("I have low self-esteem") }
+                    action: { 
+                        viewModel.selectStruggle("I have low self-esteem")
+                        advanceWithHaptic(to: 6)
+                    }
+                )
+
+                StruggleOptionButton(
+                    title: "I overthink everything",
+                    isSelected: viewModel.selectedStruggle == "I overthink everything",
+                    action: { 
+                        viewModel.selectStruggle("I overthink everything")
+                        advanceWithHaptic(to: 6)
+                    }
                 )
                 
                 // Custom Struggle Option
@@ -1231,21 +1270,22 @@ struct OnboardingView: View {
                             // Checkmark when selected, empty circle when not
                             ZStack {
                                 Circle()
-                                    .strokeBorder(Color.appCardBorder, lineWidth: 2)
-                                    .frame(width: 24, height: 24)
+                                    .strokeBorder(viewModel.selectedStruggle == "other" ? Color.appAccent : Color.appTextTertiary, lineWidth: 1.5)
+                                    .frame(width: 20, height: 20)
 
                                 if viewModel.selectedStruggle == "other" {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundColor(.appAccent)
+                                    Circle()
+                                        .fill(Color.appAccent)
+                                        .frame(width: 10, height: 10)
                                 }
                             }
                         }
-                        .padding()
+                        .padding(.vertical, 16)
+                        .padding(.horizontal, 16)
                         .background(Color.clear)  // Transparent background
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(viewModel.selectedStruggle == "other" ? Color.appAccentGradient : LinearGradient(colors: [Color.appCardBorder], startPoint: .leading, endPoint: .trailing), lineWidth: viewModel.selectedStruggle == "other" ? 2 : 1)
+                                .stroke(viewModel.selectedStruggle == "other" ? AnyShapeStyle(Color.appAccentGradient) : AnyShapeStyle(Color.appTextTertiary), lineWidth: viewModel.selectedStruggle == "other" ? 2 : 1.5)
                         )
                     }
                 }
@@ -1255,17 +1295,8 @@ struct OnboardingView: View {
             Spacer()
 
             // Continue Button - Fixed at bottom
-            Button("Continue") {
-                withAnimation {
-                    viewModel.currentStep = 6  // Go to Did You Know screen
-                }
-            }
-            .buttonStyle(OnboardingButtonStyle())
-            .disabled(!viewModel.isStruggleValid)
-            .opacity(viewModel.isStruggleValid ? 1 : 0.5)
-            .padding(.horizontal, 24)
-            .padding(.top, 12)
-            .padding(.bottom, 40)
+            Spacer()
+                .frame(height: 20)
         }
         .sheet(isPresented: $showCustomStruggleSheet) {
             CustomInputBottomSheet(
@@ -1274,100 +1305,80 @@ struct OnboardingView: View {
                 text: $viewModel.customStruggleText
             )
         }
+        .onChange(of: showCustomStruggleSheet) { isPresented in
+            if !isPresented && viewModel.selectedStruggle == "other" && !viewModel.customStruggleText.isEmpty {
+                advanceWithHaptic(to: 6)
+            }
+        }
     }
 
     // MARK: - Screen 6: Did You Know? Facts
 
     private var screen_DidYouKnow: some View {
         VStack(spacing: 0) {
-            // Back button
-            HStack {
-                Button {
-                    withAnimation {
-                        viewModel.currentStep = 5  // Back to struggle selection
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                    .foregroundColor(.appTextPrimary)
+            OnboardingBackButton(action: {
+                withAnimation {
+                    viewModel.currentStep = 5
                 }
-                Spacer()
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
+            })
 
-            // Lightning icon
-            Text("⚡")
-                .font(.system(size: 64))
-                .padding(.bottom, 12)
+            Spacer()
 
-            // Header
-            VStack(spacing: 12) {
-                Text("Did you know?")
-                    .font(.title.bold())
-                    .foregroundColor(.appTextPrimary)
-                    .multilineTextAlignment(.center)
+            // Header - Centered & Bold
+            Text("Did you know?")
+                .font(.title.bold())
+                .foregroundColor(.appTextPrimary)
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 32)
+                .scaleEffect(1.1) // Slightly larger presence
 
-                Text("Key insights about how your mind works")
-                    .font(.subheadline)
-                    .foregroundColor(.appTextSecondary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(.bottom, 20)
-
-            // Facts - Scrollable with animations + fade gradient
-            ZStack(alignment: .bottom) {
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 24) {
-                        DidYouKnowFactView(
-                            emoji: "⚡",
-                            title: "Small habits beat motivation",
-                            description: "Daily micro-actions create real change far more effectively than waiting to feel motivated.",
-                            index: 0
-                        )
-
-                        DidYouKnowFactView(
-                            emoji: "💭",
-                            title: "Negative self-talk becomes your default setting",
-                            description: "Repeating certain thoughts conditions your mind to follow those patterns automatically.",
-                            index: 1
-                        )
-
-                        DidYouKnowFactView(
-                            emoji: "🌱",
-                            title: "You're always reinforcing something",
-                            description: "Whatever you focus on each day becomes easier to repeat — calm, clarity, stress, or doubt.",
-                            index: 2
-                        )
-
-                        DidYouKnowFactView(
-                            emoji: "🔥",
-                            title: "Emotion accelerates transformation",
-                            description: "Emotionally charged moments make new habits and realizations stick much faster.",
-                            index: 3
-                        )
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 32)  // ✅ Added bottom padding for breathing room
-                }
-
-                // ✅ Fade gradient at bottom
-                LinearGradient(
-                    colors: [
-                        Color.appBackground.opacity(0),
-                        Color.appBackground
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
+            // 3D Floating Cards - Parallax Stack
+            VStack(spacing: 16) {
+                DidYouKnowCard3D(
+                    iconName: "bolt.fill",
+                    iconColor: .clear, // Value ignored
+                    title: "Small habits beat motivation — daily micro-actions create real change",
+                    index: 0,
+                    motionManager: motionManager
                 )
-                .frame(height: 60)
-                .allowsHitTesting(false)
-            }
 
-            // Continue Button - Fixed at bottom
+                DidYouKnowCard3D(
+                    iconName: "bubble.fill", // Single bubble
+                    iconColor: .clear,
+                    title: "Negative self-talk becomes your default setting over time",
+                    index: 1,
+                    motionManager: motionManager
+                )
+
+                DidYouKnowCard3D(
+                    iconName: "leaf.fill",
+                    iconColor: .clear,
+                    title: "You're always reinforcing something — calm, clarity, stress, or doubt",
+                    index: 2,
+                    motionManager: motionManager
+                )
+
+                DidYouKnowCard3D(
+                    iconName: "flame.fill",
+                    iconColor: .clear,
+                    title: "Emotion accelerates transformation — feelings make habits stick faster",
+                    index: 3,
+                    motionManager: motionManager
+                )
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 24)
+
+            // Footer Text
+            Text("We're here to help you rewire these patterns")
+                .font(.subheadline)
+                .foregroundColor(.appTextTertiary)
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 32)
+
+            Spacer()
+
+            // Continue Button
             Button("Continue") {
                 withAnimation {
                     viewModel.currentStep = 7  // Go to generating plan
@@ -1375,10 +1386,10 @@ struct OnboardingView: View {
             }
             .buttonStyle(OnboardingButtonStyle())
             .padding(.horizontal, 24)
-            .padding(.top, 12)
             .padding(.bottom, 40)
         }
         .onAppear {
+            motionManager.start() // ✅ Start gyroscope tracking
             // ✅ OPTIMIZATION: Start generating hack + audio IN BACKGROUND
             // User is reading facts - perfect time to generate!
             // By the time they finish onboarding + paywall, hack will be ready
@@ -1438,6 +1449,11 @@ struct OnboardingView: View {
                 withAnimation {
                     viewModel.currentStep = 10  // Go to red graph (life without hacks)
                 }
+            },
+            onBack: {
+                withAnimation {
+                    viewModel.currentStep = 6 // Back to DidYouKnow (skipping loading/uh-oh)
+                }
             }
         )
     }
@@ -1451,6 +1467,11 @@ struct OnboardingView: View {
             onSkip: {
                 withAnimation {
                     viewModel.currentStep = 12  // Go to green graph (life with hacks)
+                }
+            },
+            onBack: {
+                withAnimation {
+                    viewModel.currentStep = 10 // Back to UnlockCards
                 }
             }
         )
@@ -1466,19 +1487,28 @@ struct OnboardingView: View {
                 withAnimation {
                     viewModel.currentStep = 13  // Go to rating screen
                 }
+            },
+            onBack: {
+                withAnimation {
+                    viewModel.currentStep = 11 // Back to LifeWithoutHacks
+                }
             }
         )
     }
 
     // MARK: - Screen 13: Rating Screen
-
-    // MARK: - Screen 13: Rating Screen
-
+    
     private var screen_Rating: some View {
         RatingView(
             onContinue: { rating in
                 withAnimation {
+                    // viewModel.saveRating(rating) 
                     viewModel.currentStep = 14  // Go to notification permission
+                }
+            },
+            onBack: {
+                withAnimation {
+                    viewModel.currentStep = 12 // Back to LifeWithHacks
                 }
             }
         )
@@ -1491,6 +1521,11 @@ struct OnboardingView: View {
             onContinue: {
                 withAnimation {
                     viewModel.currentStep = 15  // Go to commitment screen
+                }
+            },
+            onBack: {
+                withAnimation {
+                    viewModel.currentStep = 13 // Back to Rating
                 }
             }
         )
@@ -1507,6 +1542,11 @@ struct OnboardingView: View {
                     // Show paywall - only mark complete after subscription
                     showPaywall()
                 }
+            },
+            onBack: {
+                withAnimation {
+                    viewModel.currentStep = 14 // Back to NotificationPermission
+                }
             }
         )
     }
@@ -1514,35 +1554,29 @@ struct OnboardingView: View {
     // MARK: - Screen 12: Unlock Solution Cards (Gamified)
 
     private var screen_UnlockCards: some View {
-        UnlockCardsView(onNext: {
-            withAnimation {
-                viewModel.currentStep = 11  // Go to red graph (life without hacks)
+        UnlockCardsView(
+            onNext: {
+                withAnimation {
+                    viewModel.currentStep = 11  // Go to red graph (life without hacks)
+                }
+            },
+            onBack: {
+                withAnimation {
+                    viewModel.currentStep = 9 // Back to Feedback Stats
+                }
             }
-        })
+        )
     }
 
     // MARK: - Screen 13: Time Selection
 
     private var screen4_TimeSelection: some View {
         VStack(spacing: 0) {
-            // Back button
-            HStack {
-                Button {
-                    withAnimation {
-                        viewModel.currentStep = 12  // Back to unlock cards
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                    .foregroundColor(.appTextPrimary)
+            OnboardingBackButton(action: {
+                withAnimation {
+                    viewModel.currentStep = 12
                 }
-                Spacer()
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 16)
+            })
             
             // Scrollable content
             ScrollView {
@@ -1655,29 +1689,31 @@ struct GoalOptionButton: View {
         Button(action: action) {
             HStack {
                 Text(title)
-                    .font(.body)
+                    .font(.system(.subheadline, design: .default).bold()) // Smaller, bolder text
                     .foregroundColor(.appTextPrimary)
+                    .multilineTextAlignment(.leading) // Ensure text wraps nicely
 
                 Spacer()
 
-                // Checkmark when selected, empty circle when not
+                // Radio button style - Compact
                 ZStack {
                     Circle()
-                        .strokeBorder(Color.appCardBorder, lineWidth: 2)
-                        .frame(width: 24, height: 24)
+                        .strokeBorder(isSelected ? Color.appAccent : Color.appTextTertiary, lineWidth: 1.5) // 1.5 width, visible border
+                        .frame(width: 20, height: 20) // Smaller radio
 
                     if isSelected {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.appAccent)
+                        Circle()
+                            .fill(Color.appAccent)
+                            .frame(width: 10, height: 10)
                     }
                 }
             }
-            .padding()
-            .background(Color.clear)  // Transparent background
+            .padding(.vertical, 16) // Increased vertical padding
+            .padding(.horizontal, 16)
+            .background(Color.clear)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.appAccentGradient : LinearGradient(colors: [Color.appCardBorder], startPoint: .leading, endPoint: .trailing), lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? AnyShapeStyle(Color.appAccentGradient) : AnyShapeStyle(Color.appTextTertiary), lineWidth: isSelected ? 2 : 1.5) // 1.5 width
             )
         }
     }
@@ -1692,29 +1728,30 @@ struct AgeRangeButton: View {
         Button(action: action) {
             HStack {
                 Text(title)
-                    .font(.body)
+                    .font(.system(.subheadline, design: .default).bold()) // Matched styling
                     .foregroundColor(.appTextPrimary)
 
                 Spacer()
 
-                // Checkmark when selected, empty circle when not
+                // Radio button style
                 ZStack {
                     Circle()
-                        .strokeBorder(Color.appCardBorder, lineWidth: 2)
-                        .frame(width: 24, height: 24)
+                        .strokeBorder(isSelected ? Color.appAccent : Color.appTextTertiary, lineWidth: 1.5) // 1.5 width
+                        .frame(width: 20, height: 20) // Smaller radio
 
                     if isSelected {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.appAccent)
+                        Circle()
+                            .fill(Color.appAccent)
+                            .frame(width: 10, height: 10)
                     }
                 }
             }
-            .padding()
-            .background(Color.clear)  // Transparent background
+            .padding(.vertical, 16) // Increased size
+            .padding(.horizontal, 16)
+            .background(Color.clear)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.appAccentGradient : LinearGradient(colors: [Color.appCardBorder], startPoint: .leading, endPoint: .trailing), lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? AnyShapeStyle(Color.appAccentGradient) : AnyShapeStyle(Color.appTextTertiary), lineWidth: isSelected ? 2 : 1.5) // 1.5 width
             )
         }
     }
@@ -1729,37 +1766,31 @@ struct StruggleOptionButton: View {
         Button(action: action) {
             HStack {
                 Text(title)
-                    .font(.body)
+                    .font(.system(.subheadline, design: .default).bold()) // Matched styling
                     .foregroundColor(.appTextPrimary)
                     .multilineTextAlignment(.leading)
 
                 Spacer()
 
-                // Checkmark when selected, empty circle when not
+                // Radio button style
                 ZStack {
                     Circle()
-                        .strokeBorder(Color.appCardBorder, lineWidth: 2)
-                        .frame(width: 24, height: 24)
+                        .strokeBorder(isSelected ? Color.appAccent : Color.appTextTertiary, lineWidth: 1.5) // 1.5 width
+                        .frame(width: 20, height: 20) // Smaller radio
 
                     if isSelected {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.white)
-                            .overlay(
-                                Color.appAccentGradient
-                                    .mask(
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 14, weight: .bold))
-                                    )
-                            )
+                        Circle()
+                            .fill(Color.appAccent)
+                            .frame(width: 10, height: 10)
                     }
                 }
             }
-            .padding()
-            .background(Color.clear)  // Transparent background
+            .padding(.vertical, 16) // Increased size
+            .padding(.horizontal, 16)
+            .background(Color.clear)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.appAccentGradient : LinearGradient(colors: [Color.appCardBorder], startPoint: .leading, endPoint: .trailing), lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? AnyShapeStyle(Color.appAccentGradient) : AnyShapeStyle(Color.appTextTertiary), lineWidth: isSelected ? 2 : 1.5) // 1.5 width
             )
         }
     }
@@ -2360,6 +2391,12 @@ func getMetricsForStruggle(_ struggle: String, goal: String) -> StruggleMetrics 
             metric2: "Confidence in abilities",
             metric3: "Positive self-image"
         )
+    case "I overthink everything":
+        return StruggleMetrics(
+            metric1: "Decision confidence",
+            metric2: "Mental stillness",
+            metric3: "Present awareness"
+        )
     default: // "other" or custom
         return StruggleMetrics(
             metric1: "Progress on goals",
@@ -2388,6 +2425,8 @@ func getStruggleStatistic(for struggle: String, customText: String) -> StruggleS
         return StruggleStatistic(percentage: 58, struggleText: "take things too seriously")
     case "I have low self-esteem":
         return StruggleStatistic(percentage: 85, struggleText: "struggle with low self-esteem")
+    case "I overthink everything":
+        return StruggleStatistic(percentage: 76, struggleText: "struggle with overthinking")
     case "other":
         // Use generic message for custom struggles
         let formattedText = formatCustomStruggleText(customText)
@@ -2410,6 +2449,28 @@ func getMoodBasedMessage(mood: String) -> String {
     }
 }
 
+// MARK: - Standardized Back Button
+struct OnboardingBackButton: View {
+    let action: () -> Void
+    var color: Color = .appTextPrimary
+
+    var body: some View {
+        HStack {
+            Button(action: action) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(color)
+                    .padding(8) // Touch target
+                    .contentShape(Rectangle())
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 16) // Exact same horizontal alignment
+        .padding(.top, 8)        // Exact same top spacing
+        .padding(.bottom, 0)     // Remove bottom padding to avoid pushing content too far; screens can add spacer if needed
+    }
+}
+
 // MARK: - Feedback Stats View
 
 struct FeedbackStatsView: View {
@@ -2417,6 +2478,7 @@ struct FeedbackStatsView: View {
     let struggle: String
     let customStruggle: String
     let onContinue: () -> Void
+    let onBack: () -> Void
 
     @State private var showPercentage = false
     @State private var showText = false
@@ -2437,7 +2499,10 @@ struct FeedbackStatsView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
+                OnboardingBackButton(action: onBack)
+
                 Spacer()
+
 
                 VStack(spacing: 20) {
                     // Percentage with gradient (appears first)
@@ -2511,6 +2576,7 @@ struct LifeWithoutHacksView: View {
     let struggle: String
     let goal: String
     let onSkip: () -> Void
+    let onBack: () -> Void // ✅ Added onBack parameter
 
     @State private var animationProgress: CGFloat = 0
     @State private var showText = false
@@ -2538,6 +2604,8 @@ struct LifeWithoutHacksView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
+                OnboardingBackButton(action: onBack)
+
                 Spacer()
 
                 // Personalized headline
@@ -2597,6 +2665,7 @@ struct LifeWithHacksView: View {
     let struggle: String
     let goal: String
     let onNext: () -> Void
+    let onBack: () -> Void // ✅ Added onBack param
 
     @State private var showText = false
     @State private var animationProgress: CGFloat = 0.0
@@ -2622,8 +2691,10 @@ struct LifeWithHacksView: View {
             // Adaptive background
             Color.appBackground
                 .ignoresSafeArea()
-
+            
             VStack(spacing: 0) {
+                OnboardingBackButton(action: onBack)
+                
                 Spacer()
 
                 // Headline
@@ -2681,190 +2752,9 @@ struct LifeWithHacksView: View {
 
 // MARK: - Rating View
 
-struct RatingView: View {
-    let onContinue: (Int) -> Void
+// (Deleted legacy zombie code)
 
-    @State private var selectedRating: Int = 5  // Default to 5 stars
-    
-    // Animation State
-    @State private var animatedText1 = ""
-    @State private var animatedText2 = ""
-    @State private var showLightning = false
-    @State private var isAnimatingText1 = false
-    @State private var isAnimatingText2 = false
-    @State private var animationCompleted = false
-    
-    private let fullText1 = "Made for people like you"
-    private let fullText2 = "Your transformation starts now"
-    private let typingDelay: TimeInterval = 0.05
 
-    private func startRatingAnimation() {
-        guard !isAnimatingText1 && !isAnimatingText2 else { return }
-        
-        animatedText1 = ""
-        animatedText2 = ""
-        isAnimatingText1 = true
-        
-        // Start first line
-        typeNextCharacter(isLine1: true, index: 0)
-    }
-    
-    private func typeNextCharacter(isLine1: Bool, index: Int) {
-        let fullText = isLine1 ? fullText1 : fullText2
-        
-        if index >= fullText.count {
-            if isLine1 {
-                // Finished Line 1 -> Start Line 2
-                isAnimatingText1 = false
-                isAnimatingText2 = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self.typeNextCharacter(isLine1: false, index: 0)
-                }
-            } else {
-                // Finished Line 2 -> Show Lightning
-                isAnimatingText2 = false
-                animationCompleted = true
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                    showLightning = true
-                }
-            }
-            return
-        }
-        
-        let endIndex = fullText.index(fullText.startIndex, offsetBy: index + 1)
-        let substring = String(fullText[..<endIndex])
-        
-        if isLine1 {
-            animatedText1 = substring
-        } else {
-            animatedText2 = substring
-        }
-        
-        // Haptic feedback every 3 chars
-        if index % 3 == 0 {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + typingDelay) {
-            self.typeNextCharacter(isLine1: isLine1, index: index + 1)
-        }
-    }
-
-    var body: some View {
-        ZStack {
-            // Adaptive background
-            Color.appBackground
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                Spacer()
-                
-                // Title
-                Text("Give us a rating")
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundColor(.appTextPrimary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-
-                Spacer()
-                
-                // Star rating card
-                VStack(spacing: 16) {
-                    HStack(spacing: 16) {
-                        ForEach(1...5, id: \.self) { index in
-                            Button {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                    selectedRating = index
-                                }
-                            } label: {
-                                Image(systemName: index <= selectedRating ? "star.fill" : "star")
-                                    .font(.system(size: 36))
-                                    .foregroundColor(.white)
-                                    .overlay(
-                                        Color.appAccentGradient
-                                            .mask(
-                                                Image(systemName: index <= selectedRating ? "star.fill" : "star")
-                                                    .font(.system(size: 36))
-                                            )
-                                    )
-                            }
-                            .scaleEffect(index == selectedRating ? 1.1 : 1.0)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedRating)
-                        }
-                    }
-                    .padding(.vertical, 24)
-                }
-                .frame(maxWidth: .infinity)
-                .background(Color.clear)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.appCardBorder, lineWidth: 1)
-                )
-                .cornerRadius(16)
-                .padding(.horizontal, 32)
-
-                Spacer()
-                
-                // "Made for people like you"
-                VStack(spacing: 16) {
-                    // Line 1: Made for people like you
-                    Text("Made for people like you")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.clear) // Placeholder for layout
-                        .overlay(
-                            Text(animatedText1)
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(.appTextPrimary)
-                                .animation(nil, value: animatedText1)
-                        )
-                    
-                    // Line 2: Your transformation starts now
-                    Text("Your transformation starts now")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.clear) // Placeholder for layout
-                        .overlay(
-                            Text(animatedText2)
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundColor(.appTextSecondary)
-                                .animation(nil, value: animatedText2)
-                        )
-                    
-                    // Lightning Emoji - Hero element
-                    if showLightning {
-                        Text("⚡️")
-                            .font(.system(size: 72))
-                            .shadow(color: .appAccent.opacity(0.5), radius: 20, x: 0, y: 0)
-                            .padding(.top, 16)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                }
-                .padding(.top, 8)
-
-                Spacer()
-                
-                // Bottom button
-                Button {
-                    onContinue(selectedRating)
-                } label: {
-                    Text("Continue")
-                }
-                .buttonStyle(OnboardingButtonStyle())
-                .padding(.horizontal, 24)
-                .padding(.bottom, 50)
-            }
-            .onAppear {
-                if !animationCompleted {
-                    startRatingAnimation()
-                } else {
-                    // Show final state if already completed
-                    animatedText1 = fullText1
-                    animatedText2 = fullText2
-                    showLightning = true
-                }
-            }
-        }
-    }
-}
 
 // MARK: - Testimonial Card Component
 
@@ -2930,98 +2820,114 @@ struct TestimonialCard: View {
 
 struct NotificationPermissionView: View {
     let onContinue: () -> Void
+    let onBack: () -> Void // ✅ Added onBack parameter
+    
+    @State private var showingSystemPrompt = false
 
+    @State private var selectedTime: Date = {
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        components.hour = 5
+        components.minute = 30
+        return Calendar.current.date(from: components) ?? Date()
+    }()
+    
     @State private var isAnimating = false
-    @State private var moodLevel: CGFloat = 0.0
 
     var body: some View {
         ZStack {
             // Adaptive background
-            Color.appBackground
+            backgroundColor
+                .ignoresSafeArea(.all)
+                .animation(.easeInOut(duration: 0.5), value: isNightMode) // Smooth transition
+            
+            // Star Field (Night Mode)
+            StarFieldView(opacity: isNightMode ? 1.0 : 0.0)
                 .ignoresSafeArea()
 
-            VStack(spacing: 32) {
+            VStack(spacing: 0) {
+                // Back Button (Top Left)
+                OnboardingBackButton(action: onBack, color: isNightMode ? .white : .appTextPrimary)
+
+                // Padding for top spacing
+                Spacer().frame(height: 10)
+                
                 Spacer()
 
-                // Lightning emoji with glow effect
-                ZStack {
-                    // Glow layers
-                    ForEach(0..<3, id: \.self) { index in
-                        Text("⚡️")
-                            .font(.system(size: 96))
-                            .opacity(0.3 * moodLevel)
-                            .blur(radius: 20 + (CGFloat(index) * 10))
-                    }
-
-                    // Main lightning emoji
-                    Text("⚡️")
-                        .font(.system(size: 96))
-                        .shadow(
-                            color: Color.appAccent.opacity(0.4 + (moodLevel * 0.6)),
-                            radius: 20 + (moodLevel * 40),
-                            x: 0,
-                            y: 0
-                        )
-                        .shadow(
-                            color: Color.appAccent.opacity(moodLevel * 0.8),
-                            radius: 30 + (moodLevel * 30),
-                            x: 0,
-                            y: 0
-                        )
-                }
-                .scaleEffect(0.85 + (moodLevel * 0.25))
-                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: moodLevel)
-
-                VStack(spacing: 16) {
+                // Main Content
+                VStack(spacing: 32) {
                     // Title
-                    Text("Get your daily brain hack")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(.appTextPrimary)
+                    Text("When do you want to evolve?")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(isNightMode ? .white : .appTextPrimary)
                         .multilineTextAlignment(.center)
-
+                    
                     // Subtitle
-                    Text("We'll send you a personalized hack each day to help rewire your brain and build better habits")
+                    Text("We'll send your daily brain hack at this time to help rewire your habits.")
                         .font(.system(size: 17))
-                        .foregroundColor(.appTextSecondary)
+                        .foregroundColor(isNightMode ? .white.opacity(0.8) : .appTextSecondary)
                         .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
                         .lineSpacing(4)
+                    
+                    // Golden Time Ring
+                    TimeDialView(selectedTime: $selectedTime)
+                        .scaleEffect(isAnimating ? 1.0 : 0.95)
+                        .opacity(isAnimating ? 1.0 : 0.0)
+                        
                 }
-                .padding(.horizontal, 32)
-
+                
                 Spacer()
 
-                // Buttons
-                VStack(spacing: 12) {
-                    // Enable Notifications button
+                // Dynamic Action Button
+                VStack(spacing: 16) {
                     Button {
                         Task {
                             await requestNotificationPermission()
                             onContinue()
                         }
                     } label: {
-                        Text("Enable Notifications")
+                        Text("Schedule for \(formattedTime(selectedTime))")
                     }
                     .buttonStyle(OnboardingButtonStyle())
                     .padding(.horizontal, 24)
-
+                    
                     // Skip button
                     Button {
                         onContinue()
                     } label: {
                         Text("Maybe Later")
                             .font(.subheadline)
-                            .foregroundColor(.appTextSecondary)
+                            .foregroundColor(isNightMode ? .white.opacity(0.7) : .appTextSecondary)
+                            .opacity(isNightMode ? 0.7 : 1.0)
                     }
-                    .padding(.bottom, 20)
                 }
-                .padding(.bottom, 30)
+                .padding(.bottom, 50)
             }
         }
         .onAppear {
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                moodLevel = 1.0
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.2)) {
+                isAnimating = true
             }
         }
+    }
+    
+    // Theme Helpers
+    
+    private var isNightMode: Bool {
+        let hour = Calendar.current.component(.hour, from: selectedTime)
+        // Night is 8 PM (20) to 4 AM (4)
+        return hour >= 20 || hour < 4
+    }
+    
+    private var backgroundColor: Color {
+        isNightMode ? Color(hex: "0B0F19") : Color.appBackground // Deep Midnight vs Cream
+    }
+    
+    // ... rest of class functions ...
+    private func formattedTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: date)
     }
 
     private func requestNotificationPermission() async {
@@ -3040,10 +2946,35 @@ struct NotificationPermissionView: View {
     }
 }
 
+// MARK: - Star Field View (Night Mode)
+
+struct StarFieldView: View {
+    let opacity: Double
+    
+    var body: some View {
+        Canvas { context, size in
+            // Draw random stars
+            for _ in 0..<50 {
+                let x = Double.random(in: 0...size.width)
+                let y = Double.random(in: 0...size.height)
+                let radius = Double.random(in: 1...2.5)
+                let opacity = Double.random(in: 0.3...1.0)
+                
+                let rect = CGRect(x: x, y: y, width: radius, height: radius)
+                context.opacity = opacity
+                context.fill(Path(ellipseIn: rect), with: .color(.white))
+            }
+        }
+        .opacity(opacity)
+        .animation(.easeInOut(duration: 1.0), value: opacity)
+    }
+}
+
 // MARK: - Commitment View (Before Paywall)
 
 struct CommitmentView: View {
     let onContinue: () -> Void
+    let onBack: () -> Void
 
     @State private var isCommitted = false
 
@@ -3053,81 +2984,72 @@ struct CommitmentView: View {
             Color.appBackground
                 .ignoresSafeArea()
 
-            VStack(spacing: 24) {
-                Spacer().frame(height: 20)
+            VStack(spacing: 0) {
+                // Back Button (Top Left)
+                OnboardingBackButton(action: onBack)
 
-                // Large emoji
-                Text("⚡️")
-                    .font(.system(size: 80))
+                // Main Content
+                VStack(spacing: 24) {
+                    Spacer().frame(height: 10)
 
-                // Title
-                Text("Ready to rewire?")
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundColor(.appTextPrimary)
-                    .multilineTextAlignment(.center)
+                    // Large emoji
+                    Text("⚡️")
+                        .font(.system(size: 80))
 
-                // Subtitle
-                Text("Make a small commitment to yourself.")
-                    .font(.system(size: 17))
-                    .foregroundColor(.appTextSecondary)
-                    .multilineTextAlignment(.center)
-
-                // Commitment card
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("I commit to:")
-                        .font(.system(size: 16, weight: .semibold))
+                    // Title
+                    Text("Ready to rewire?")
+                        .font(.system(size: 32, weight: .bold))
                         .foregroundColor(.appTextPrimary)
+                        .multilineTextAlignment(.center)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        CommitmentLine(text: "Showing up for one tiny hack a day")
-                        CommitmentLine(text: "Trying the experiments instead of overthinking")
-                        CommitmentLine(text: "Using this space to be honest with myself")
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
-                .background(Color.clear)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.appCardBorder, lineWidth: 1)
-                )
-                .cornerRadius(16)
-
-                // Tap here text
-                Button {
-                    // Stub - no action for now
-                } label: {
-                    Text("Tap here ↓")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white)
-                        .overlay(
-                            Color.appAccentGradient
-                                .mask(
-                                    Text("Tap here ↓")
-                                        .font(.system(size: 16, weight: .medium))
-                                )
-                        )
-                }
-
-                // Toggle row
-                HStack {
-                    Text("I'm ready to start rewiring")
+                    // Subtitle
+                    Text("Make a small commitment to yourself.")
                         .font(.system(size: 17))
-                        .foregroundColor(.appTextPrimary)
+                        .foregroundColor(.appTextSecondary)
+                        .multilineTextAlignment(.center)
 
-                    Spacer()
+                    // Commitment card
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("I commit to:")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.appTextPrimary)
 
-                    Toggle("", isOn: $isCommitted)
-                        .labelsHidden()
-                        .tint(Color.appAccent)
+                        VStack(alignment: .leading, spacing: 10) {
+                            CommitmentLine(text: "Showing up for one tiny hack a day")
+                            CommitmentLine(text: "Trying the experiments instead of overthinking")
+                            CommitmentLine(text: "Using this space to be honest with myself")
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .background(Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.appCardBorder, lineWidth: 1)
+                    )
+                    .cornerRadius(16)
+
+                    // Toggle row
+                    HStack {
+                        Text("I'm ready to start rewiring")
+                            .font(.system(size: 17))
+                            .foregroundColor(.appTextPrimary)
+
+                        Spacer()
+
+                        Toggle("", isOn: $isCommitted)
+                            .labelsHidden()
+                            .tint(Color.appAccent)
+                    }
+                    .padding(16)
+                    .background(Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.appCardBorder, lineWidth: 1)
+                    )
+                    .cornerRadius(16)
                 }
-                .padding(16)
-                .background(Color.clear)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.appCardBorder, lineWidth: 1)
-                )
-                .cornerRadius(16)
+                .padding(.horizontal, 24)
 
                 Spacer()
 
@@ -3141,8 +3063,8 @@ struct CommitmentView: View {
                 .disabled(!isCommitted)
                 .opacity(isCommitted ? 1 : 0.5)
                 .padding(.bottom, 50)
+                .padding(.horizontal, 24)
             }
-            .padding(.horizontal, 24)
         }
     }
 }
@@ -3172,6 +3094,7 @@ struct CommitmentLine: View {
 // The width constraint must be INSIDE the component,
 // not just on the parent call
 
+// MARK: - Unlockable Card (Hyper-Spring Pop Animation) 🍬 💥
 struct UnlockableCard: View {
     let emoji: String
     let text: String
@@ -3179,130 +3102,121 @@ struct UnlockableCard: View {
     let isReady: Bool
     let onTap: () -> Void
 
-    @State private var flipRotation: Double = 0
-    @State private var cardScale: CGFloat = 1.0
-    @State private var glowOpacity: Double = 0
-
-    // ✅ Card dimensions - WIDTH AND HEIGHT
+    // Animation State
+    @State private var isPressed: Bool = false
+    
+    // Constant Dimensions
     private let cardWidth: CGFloat = 320
     private let cardHeight: CGFloat = 200
-    private let cardCornerRadius: CGFloat = 20
+    private let cardCornerRadius: CGFloat = 36
 
     var body: some View {
         ZStack {
-            // Card back - with WIDTH constraint
-            VelvetBackground(
-                baseColor: Color(red: 1.0, green: 0.6, blue: 0.2),
-                cornerRadius: cardCornerRadius
-            )
-            .frame(width: cardWidth, height: cardHeight)  // ✅ EXPLICIT WIDTH
-            .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius))
-            .overlay(
-                VStack(spacing: 12) {
-                    Text(emoji)
-                        .font(.system(size: 48))
-                    
-                    if !isReady {
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: 28))
-                            .foregroundColor(.white.opacity(0.9))
-                    }
-                }
-            )
-            .shadow(color: Color.black.opacity(0.15), radius: 12, x: 0, y: 4)
-            .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 2)
-            .rotation3DEffect(.degrees(flipRotation), axis: (x: 0, y: 1, z: 0))
-            .opacity(flipRotation < 90 ? 1 : 0)
-
-            // Card front - with WIDTH constraint
-            RoundedRectangle(cornerRadius: cardCornerRadius)
+            // 1. CARD BACKGROUND (Always clean white base)
+            RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                 .fill(Color.white)
-                .frame(width: cardWidth, height: cardHeight)  // ✅ EXPLICIT WIDTH
-                .overlay(
-                    RoundedRectangle(cornerRadius: cardCornerRadius)
-                        .stroke(Color.appAccentGradient, lineWidth: 2.5)
+                .shadow(
+                    color: Color(hex: "3E3322").opacity(isUnlocked ? 0.12 : 0.05),
+                    radius: isUnlocked ? 20 : 10,
+                    x: 0,
+                    y: isUnlocked ? 8 : 4
                 )
-                .overlay(
-                    VStack(spacing: 12) {
-                        Text(emoji)
-                            .font(.system(size: 40))
-
-                        Text(text)
-                            .font(.system(size: 15, weight: .regular))
-                            .foregroundColor(.appTextPrimary)
-                            .multilineTextAlignment(.center)
-                            .lineSpacing(3)
-                            .padding(.horizontal, 24)
-                    }
-                    .padding(.vertical, 20)
-                )
-                .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 4)
-                .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 2)
-                .rotation3DEffect(.degrees(flipRotation - 180), axis: (x: 0, y: 1, z: 0))
-                .opacity(flipRotation >= 90 ? 1 : 0)
-
-            // Glow - with WIDTH constraint
-            RoundedRectangle(cornerRadius: cardCornerRadius)
-                .stroke(Color(red: 1.0, green: 0.84, blue: 0.0), lineWidth: 3)
-                .shadow(color: Color(red: 1.0, green: 0.84, blue: 0.0), radius: 15)
-                .frame(width: cardWidth, height: cardHeight)  // ✅ EXPLICIT WIDTH
-                .opacity(glowOpacity)
+            
+            // 2. CONTENT LAYER (Emoji + Text)
+            VStack(spacing: 16) {
+                Text(emoji)
+                    .font(.system(size: isUnlocked ? 48 : 52)) // Scale down slightly on unlock
+                
+                if isUnlocked {
+                    Text(text)
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(Color(hex: "2D2418"))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .lineSpacing(2)
+                        .transition(.scale(scale: 0.9).combined(with: .opacity).animation(.spring(response: 0.3, dampingFraction: 0.7)))
+                } else {
+                     // Locked state text placeholder
+                    Text(text)
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(Color(hex: "2D2418").opacity(0.3))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .redacted(reason: .placeholder)
+                }
+            }
+            // BLUR SHATTER: 12px blur -> 0px instantly on unlock
+            .blur(radius: isUnlocked ? 0 : 12)
+            .opacity(isUnlocked ? 1.0 : 0.7)
+            
+            // 3. FROSTED GUMMY OVERLAY (Locked State)
+            if !isUnlocked {
+                RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                    .fill(Color(hex: "FDFBF7").opacity(0.4))
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+                    .overlay(
+                        VStack(spacing: 8) {
+                            if !isReady {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(Color(hex: "B0ADA5"))
+                            } else {
+                                Text("Tap to reveal")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(Color(hex: "B0ADA5"))
+                                    .tracking(0.5)
+                            }
+                        }
+                    )
+                    // Immediate removal on unlock for "Shatter" effect
+                    .transition(.identity) 
+            }
         }
-        .frame(width: cardWidth, height: cardHeight)  // ✅ CONSTRAIN THE ZSTACK TOO
-        .scaleEffect(cardScale)
-        .onTapGesture {
+        .frame(width: cardWidth, height: cardHeight)
+        .overlay(
+            RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                .stroke(isUnlocked ? Color.appAccent.opacity(0.3) : Color.white.opacity(0.5), lineWidth: 1)
+        )
+        // HYPER-SPRING PHYSICS 🍬
+        // 1. Locked: Default scale 0.95 (Recessed)
+        // 2. Press: Scale 0.90 (Compression)
+        // 3. Unlocked: Scale 1.0 (Expansion)
+        .scaleEffect(
+            isUnlocked ? 1.0 : (isPressed ? 0.90 : 0.95)
+        )
+        .animation(
+            isPressed 
+                ? .interactiveSpring(response: 0.3, dampingFraction: 0.6) // Squishy Press
+                : .spring(response: 0.4, dampingFraction: 0.5),          // Bouncy Release
+            value: isPressed
+        )
+        .animation(
+            .spring(response: 0.4, dampingFraction: 0.5), // Bouncy Unlock
+            value: isUnlocked
+        )
+        .onLongPressGesture(minimumDuration: 0, pressing: { pressing in
             if isReady && !isUnlocked {
-                // Initial tap - light haptic for immediate feedback
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                onTap()
+                isPressed = pressing
             }
-        }
-        .onChange(of: isUnlocked) { oldValue, newValue in
-            if newValue {
-                // Immediate scale + glow
-                withAnimation(.easeOut(duration: 0.15)) {
-                    cardScale = 1.03
-                    glowOpacity = 0.8
-                }
-
-                // Flip animation
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                    flipRotation = 180
-                }
-                
-                // Premium haptic sequence - Sophisticated Unlock Pattern
-                // Echo haptic - quick double-tap feel
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                }
-                
-                // Scale back
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                        cardScale = 1.0
-                    }
-                }
-                
-                // Midpoint haptic - card is perpendicular during flip
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                }
-                
-                // Settling haptic - card approaching final position
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.40) {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                }
-
-                // Final haptics + glow fade - card locked in place
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        glowOpacity = 0
-                    }
+        }, perform: {
+            // Action handled in onTapGesture for better reliability or here?
+            // Using logic: Pressing handled visual state. Tap triggers unlock.
+        })
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                if isReady && !isUnlocked {
+                    triggerPopUnlock()
                 }
             }
-        }
+        )
+    }
+    
+    private func triggerPopUnlock() {
+        // Haptic Explosion
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        
+        // Trigger State Change (this will cause the "Release" animation)
+        onTap()
     }
 }
 
@@ -3312,6 +3226,7 @@ struct UnlockableCard: View {
 
 struct UnlockCardsView: View {
     let onNext: () -> Void
+    let onBack: () -> Void // ✅ Added onBack parameter
 
     @State private var isCard1Unlocked = false
     @State private var isCard2Unlocked = false
@@ -3328,6 +3243,8 @@ struct UnlockCardsView: View {
             Color.appBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
+                OnboardingBackButton(action: onBack)
+
                 Spacer()
                 
                 // Header
@@ -3374,31 +3291,20 @@ struct UnlockCardsView: View {
 
                 Spacer()
 
-                // Next button - matches card width
-                Button {
-                    onNext()
-                } label: {
-                    Text("Next")
-                        .font(.headline)
-                        .foregroundColor(bothCardsUnlocked ? .white : Color(red: 0.6, green: 0.6, blue: 0.6))
-                        .frame(width: 320, height: 52)  // ✅ EXPLICIT WIDTH
-                        .background(
-                            Group {
-                                if bothCardsUnlocked {
-                                    Color.appAccentGradient
-                                } else {
-                                    LinearGradient(
-                                        colors: [Color(red: 0.85, green: 0.85, blue: 0.85)],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                }
-                            }
-                        )
-                        .cornerRadius(12)
-                        .opacity(bothCardsUnlocked ? 1.0 : 0.5)
+                // Navigation Buton
+                // Action Buttons
+                VStack(spacing: 16) {
+                    // Skip Button only (Cards auto-advance)
+                    Button {
+                        onNext()
+                    } label: {
+                        Text("Skip")
+                            .font(.subheadline)
+                            .foregroundColor(.appTextSecondary)
+                    }
+                    .padding(.vertical, 8)
                 }
-                .disabled(!bothCardsUnlocked)
+                .padding(.horizontal, 24)
                 .padding(.bottom, 50)
             }
             .padding(.top, 24)
@@ -3424,6 +3330,11 @@ struct UnlockCardsView: View {
             isCard2Unlocked = true
         }
         createConfetti(for: .card2)
+        
+        // Auto-advance after animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            onNext()
+        }
     }
 
     private func createConfetti(for card: CardType) {
@@ -3951,6 +3862,95 @@ struct GraphLegend: View {
     }
 }
 
+struct RatingView: View {
+    let onContinue: (Int) -> Void
+    let onBack: () -> Void
+
+    @State private var selectedRating = 0
+    @State private var hasInteracted = false
+
+    var body: some View {
+        ZStack {
+            Color.appBackground.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                OnboardingBackButton(action: onBack)
+                
+                Spacer()
+
+                // Header
+                VStack(spacing: 12) {
+                    Text("First impressions?")
+                        .font(.system(size: 32, weight: .bold))
+                        .foregroundColor(.appTextPrimary)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("How are you liking the experience?")
+                        .font(.system(size: 17)) // Subheadline size
+                        .foregroundColor(.appTextSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 32)
+                .padding(.bottom, 40)
+                
+                // Rating Card
+                VStack(spacing: 24) {
+                    // Stars
+                    HStack(spacing: 12) {
+                        ForEach(1...5, id: \.self) { star in
+                            Button {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                                    selectedRating = star
+                                    hasInteracted = true
+                                }
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                
+                                // Auto-advance after delay
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                                    onContinue(star)
+                                }
+                            } label: {
+                                Image(systemName: "star.fill")
+                                    .font(.system(size: 36))
+                                    .foregroundColor(star <= selectedRating ? .appAccent : Color.gray.opacity(0.3))
+                                    .scaleEffect(selectedRating == star ? 1.2 : 1.0)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 32)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.white.opacity(0.5))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                            )
+                    )
+                    .padding(.horizontal, 24)
+                }
+                
+                Spacer()
+                
+                // Continue Button
+                // Action Buttons
+                VStack(spacing: 16) {
+                    // Skip button only (Star tap advances)
+                    Button {
+                        onContinue(0)
+                    } label: {
+                        Text("Skip")
+                            .font(.subheadline)
+                            .foregroundColor(.appTextSecondary)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 50)
+            }
+        }
+    }
+}
+
 // MARK: - Uh Oh Animation View
 
 struct UhOhAnimationView: View {
@@ -4028,42 +4028,71 @@ struct UhOhAnimationView: View {
 
 // MARK: - Did You Know Fact View with Animation
 
-struct DidYouKnowFactView: View {
-    let emoji: String
+struct DidYouKnowCard3D: View {
+    let iconName: String
+    let iconColor: Color
     let title: String
-    let description: String
     let index: Int
-
+    @ObservedObject var motionManager: MotionManager
+    
     @State private var isVisible = false
-
+    
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // Emoji icon
-            Text(emoji)
-                .font(.system(size: 32))
-                .frame(width: 40, height: 40)
-
-            // Text content
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .font(.body.weight(.semibold))
-                    .foregroundColor(.appTextPrimary)
-
-                Text(description)
-                    .font(.subheadline)
-                    .foregroundColor(.appTextSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 16) {
+            // Icon
+            ZStack {
+                Circle()
+                    .fill(Color(hex: "FFF9E5")) // Soft yellow/cream background
+                    .frame(width: 48, height: 48)
+                
+                Image(systemName: iconName)
+                    .font(.system(size: 20, weight: .bold)) // Bolder icon
+                    .foregroundColor(Color(hex: "FFD60A")) // Gold/Yellow icon color
             }
+            .padding(.leading, 4) // Slight inset
+            
+            // Text
+            Text(title)
+                .font(.system(size: 16, weight: .medium)) // Slightly smaller, crisper font
+                .foregroundColor(.appTextPrimary) // Dark text
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(3)
+                .lineSpacing(4) // Increased line spacing for readability
+                .multilineTextAlignment(.leading)
+            
+            Spacer(minLength: 0)
         }
-        .opacity(isVisible ? 1 : 0)
-        .offset(y: isVisible ? 0 : 30)
-        .animation(
-            .spring(response: 0.9, dampingFraction: 0.75)
-                .delay(0.3 + (Double(index) * 0.5)),
-            value: isVisible
+        .padding(.horizontal, 16)
+        .frame(height: 100) // Fixed height for uniform size
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(hex: "FDFBF7")) // ✅ Solid warm off-white background
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.appTextTertiary, lineWidth: 1.5) // Subtle border
+        )
+        // 3D PARALLAX EFFECT (Kept but subtle)
+        .rotation3DEffect(
+            .degrees(motionManager.pitch * 3), // Reduced intensity
+            axis: (x: 1, y: 0, z: 0)
+        )
+        .rotation3DEffect(
+            .degrees(motionManager.roll * 3), // Reduced intensity
+            axis: (x: 0, y: 1, z: 0)
+        )
+        // ANIMATION - DOMINO CASCADE
+        .opacity(isVisible ? 1 : 0)
+        .scaleEffect(isVisible ? 1.0 : 0.93) // Subtle expansion
+        .offset(y: isVisible ? 0 : 30)       // Increased slide distance
         .onAppear {
-            isVisible = true
+            // Slower, liquid stagger for "chain reaction" feel
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3 + (Double(index) * 0.7)) { // Even slower premium stagger
+                withAnimation(.spring(response: 1.0, dampingFraction: 0.85)) { // Heavy, luxurious motion
+                    isVisible = true
+                }
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            }
         }
     }
 }
@@ -4090,19 +4119,24 @@ struct TimeOptionButton: View {
                 
                 Spacer()
                 
-                Circle()
-                    .strokeBorder(Color.appCardBorder, lineWidth: 2)
-                    .background(
+                // Radio button style
+                ZStack {
+                    Circle()
+                        .strokeBorder(isSelected ? Color.appAccent : Color.appCardBorder, lineWidth: 2)
+                        .frame(width: 24, height: 24)
+
+                    if isSelected {
                         Circle()
-                            .fill(isSelected ? Color.appAccentGradient : LinearGradient(colors: [Color.clear], startPoint: .leading, endPoint: .trailing))
-                    )
-                    .frame(width: 24, height: 24)
+                            .fill(Color.appAccent)
+                            .frame(width: 12, height: 12)
+                    }
+                }
             }
             .padding()
             .background(Color.appCardBackground)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Color.appCardBorder, lineWidth: 1)
+                    .stroke(isSelected ? AnyShapeStyle(Color.appAccentGradient) : AnyShapeStyle(Color.appCardBorder), lineWidth: isSelected ? 2 : 1)
             )
         }
     }
@@ -4309,6 +4343,348 @@ struct CustomInputBottomSheet: View {
     }
 }
 
+// MARK: - Premium Design Components
+
+struct LightningPatternView: View {
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                ForEach(0..<15) { index in
+                    Text("⚡️")
+                        .font(.system(size: CGFloat.random(in: 10...20)))
+                        .opacity(Double.random(in: 0.1...0.3))
+                        .position(
+                            x: CGFloat.random(in: 0...geometry.size.width),
+                            y: CGFloat.random(in: 0...geometry.size.height)
+                        )
+                        .rotationEffect(.degrees(Double.random(in: -30...30)))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+struct LaurelWreathView: View {
+    var body: some View {
+        HStack(spacing: 240) { // Spacing defines width of wreath
+            // Left Branch
+            Image(systemName: "laurel.leading")
+                .font(.system(size: 60, weight: .light))
+                .foregroundColor(.appAccent.opacity(0.6))
+            
+            // Right Branch
+            Image(systemName: "laurel.trailing")
+                .font(.system(size: 60, weight: .light))
+                .foregroundColor(.appAccent.opacity(0.6))
+        }
+    }
+}
+
+
+// MARK: - Time Dial View (Golden Ring - Solar Winder)
+
+struct TimeDialView: View {
+    @Binding var selectedTime: Date
+    
+    // Config
+    private let calendar = Calendar.current
+    private let dialRadius: CGFloat = 120
+    private let knobRadius: CGFloat = 16
+    
+    // Haptics
+    private let impactGenerator = UIImpactFeedbackGenerator(style: .medium) // Stronger click
+    private let selectionGenerator = UIImpactFeedbackGenerator(style: .light)
+    
+    // State for drag logic
+    @State private var previousAngle: Double = 0.0
+    
+    // Theme Colors
+    private var isNightMode: Bool {
+        let hour = calendar.component(.hour, from: selectedTime)
+        return hour >= 20 || hour < 4
+    }
+    
+    private var accentColor: Color {
+        isNightMode ? Color.white : Color.appAccent
+    }
+    
+    private var knobColor: Color {
+        isNightMode ? Color(hex: "FDB813") : Color.appAccent
+    }
+    
+    var body: some View {
+        ZStack {
+            // 0. Inner Background Circle (Theme Based)
+            Circle()
+                .fill(isNightMode ? Color.blue.opacity(0.1) : Color.appAccent.opacity(0.1))
+                .frame(width: dialRadius * 2, height: dialRadius * 2)
+
+            // 1. Ticks
+            ForEach(0..<48) { index in
+                let isMajor = index % 12 == 0
+                let isHour = index % 4 == 0
+                
+                Rectangle()
+                    .fill(isMajor ? (isNightMode ? Color.white.opacity(0.8) : Color.black.opacity(0.6)) 
+                          : (isNightMode ? Color.white.opacity(0.3) : Color.gray.opacity(0.5)))
+                    .frame(width: isMajor ? 3 : (isHour ? 2 : 1), 
+                           height: isMajor ? 10 : (isHour ? 8 : 4))
+                    .offset(y: -(dialRadius - 8))
+                    .rotationEffect(.degrees(Double(index) * 7.5))
+            }
+            
+            // 2. Main Ring Path
+            Circle()
+                .trim(from: 0.0, to: angleToProgress())
+                .stroke(accentColor, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .frame(width: dialRadius * 2, height: dialRadius * 2)
+                .rotationEffect(.degrees(-90))
+            
+            // 3. Numbers
+            ForEach(1...12, id: \.self) { hour in
+                Text("\(hour)")
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(isNightMode ? Color.white.opacity(0.8) : Color.gray)
+                    .position(
+                        x: dialRadius + 20,
+                        y: dialRadius + 20
+                    )
+                    .offset(
+                        x: (dialRadius - 32) * sin(Double(hour) * .pi / 6),
+                        y: -(dialRadius - 32) * cos(Double(hour) * .pi / 6)
+                    )
+            }
+            .frame(width: dialRadius * 2 + 40, height: dialRadius * 2 + 40)
+            
+            // 4. Draggable Knob
+            Circle()
+                .fill(accentColor)
+                .frame(width: 32, height: 32)
+                .overlay(
+                    Circle()
+                        .stroke(Color.white, lineWidth: 4)
+                )
+                .shadow(color: accentColor.opacity(0.8), radius: isNightMode ? 12 : 8, x: 0, y: 0) // Glow stronger at night
+                .offset(y: -dialRadius)
+                .rotationEffect(timeToAngle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            updateTime(from: value.location)
+                        }
+                )
+            
+            // 5. Central Display
+            VStack(spacing: 2) {
+                Text(timeString(from: selectedTime))
+                    .font(.system(size: 48, weight: .bold))
+                    .foregroundColor(isNightMode ? .white : .appTextPrimary)
+                    .monospacedDigit()
+                
+                Text(amPmString(from: selectedTime))
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(accentColor)
+                
+                Text("DAILY")
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(2)
+                    .foregroundColor(accentColor.opacity(0.8))
+                    .padding(.top, 4)
+            }
+        }
+        .frame(width: dialRadius * 2 + 40, height: dialRadius * 2 + 40)
+        .padding()
+    }
+    
+    // MARK: - Helpers
+    
+    private func angleToProgress() -> CGFloat {
+        let hour = calendar.component(.hour, from: selectedTime)
+        let minute = calendar.component(.minute, from: selectedTime)
+        let hour12 = hour % 12
+        let minuteFraction = Double(minute) / 60.0
+        let totalFraction = (Double(hour12) + minuteFraction) / 12.0
+        return totalFraction == 0 ? 1.0 : totalFraction
+    }
+    
+    private func updateTime(from location: CGPoint) {
+        let center = CGPoint(x: dialRadius + 20, y: dialRadius + 20)
+        let vector = CGVector(dx: location.x - center.x, dy: location.y - center.y)
+        var angle = atan2(vector.dy, vector.dx) + .pi / 2
+        
+        if angle < 0 { angle += 2 * .pi }
+        
+        // Solar Winder Logic: Detect Wrap
+        // If angle jumps from near 2pi (11:59) to near 0 (12:01), or vice versa
+        let threshold: Double = 5.0 // ~280 degrees gap to ignore glitches
+        
+        if abs(angle - previousAngle) > threshold {
+            // A wrap occurred!
+            toggleAmPm()
+            impactGenerator.impactOccurred()
+        }
+        previousAngle = angle
+        
+        // Time Calculation
+        let totalMinutes = (angle / (2 * .pi)) * 12 * 60
+        let snappedMinutes = round(totalMinutes / 15) * 15
+        
+        let hour = Int(snappedMinutes / 60)
+        let minute = Int(snappedMinutes.truncatingRemainder(dividingBy: 60))
+        
+        var newComponents = calendar.dateComponents([.year, .month, .day], from: selectedTime)
+        
+        // Preserve current AM/PM state (logic handled by toggleAmPm separately)
+        let currentHour = calendar.component(.hour, from: selectedTime)
+        let isCurrentPM = currentHour >= 12
+        var newHour24 = hour
+        
+        if isCurrentPM {
+            if hour < 12 { newHour24 += 12 }
+            if hour == 12 { newHour24 = 12 }
+        } else {
+             if hour == 12 { newHour24 = 0 }
+        }
+        
+        if newHour24 == 24 { newHour24 = 0 }
+        
+        newComponents.hour = newHour24
+        newComponents.minute = minute
+        
+        if let newDate = calendar.date(from: newComponents) {
+            if abs(newDate.timeIntervalSince(selectedTime)) > 0 {
+                selectedTime = newDate
+                if Int(snappedMinutes) % 60 == 0 { // Click on hour
+                     selectionGenerator.impactOccurred()
+                }
+            }
+        }
+    }
+    
+    private func timeToAngle() -> Angle {
+        let hour = calendar.component(.hour, from: selectedTime)
+        let minute = calendar.component(.minute, from: selectedTime)
+        let hour12 = hour % 12
+        let minuteFraction = Double(minute) / 60.0
+        let angleDegrees = (Double(hour12) + minuteFraction) * 30.0
+        return .degrees(angleDegrees)
+    }
+    
+    private func timeString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm"
+        return formatter.string(from: date)
+    }
+    
+    private func amPmString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "a"
+        return formatter.string(from: date)
+    }
+    
+    private func toggleAmPm() {
+        var components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: selectedTime)
+        if let currentHour = components.hour {
+             components.hour = (currentHour + 12) % 24
+             if let newDate = calendar.date(from: components) {
+                 selectedTime = newDate
+             }
+        }
+    }
+}
+
 #Preview {
     OnboardingView(isOnboardingComplete: .constant(false))
+}
+
+// MARK: - Motion Manager (Internal) -> REMOVED (Using PrismMotionManager from PrismComponents.swift)
+
+
+// MARK: - Sparkle Effect
+struct SparkleView: View {
+    @State private var particles: [SparkleParticle] = []
+    
+    struct SparkleParticle: Hashable, Identifiable {
+        let id = UUID()
+        var x: CGFloat
+        var y: CGFloat
+        var scale: CGFloat
+        var opacity: Double
+        var speedX: CGFloat
+        var speedY: CGFloat
+    }
+    
+    var body: some View {
+        ZStack {
+            ForEach(particles) { particle in
+                Image(systemName: "sparkle")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.0)) // Gold
+                    .scaleEffect(particle.scale)
+                    .opacity(particle.opacity)
+                    .offset(x: particle.x, y: particle.y)
+            }
+        }
+        .onAppear {
+            createParticles()
+        }
+    }
+    
+    private func createParticles() {
+        for _ in 0..<15 {
+            let angle = Double.random(in: 0...2 * .pi)
+            let distance = Double.random(in: 40...100) // Spread out
+            let speed = Double.random(in: 0.5...1.0)
+            
+            particles.append(
+                SparkleParticle(
+                    x: 0,
+                    y: 0,
+                    scale: Double.random(in: 0.5...1.0),
+                    opacity: 1.0,
+                    speedX: cos(angle) * distance * speed,
+                    speedY: sin(angle) * distance * speed
+                )
+            )
+        }
+        
+        withAnimation(.easeOut(duration: 1.2)) {
+            for i in 0..<particles.count {
+                particles[i].x = particles[i].speedX
+                particles[i].y = particles[i].speedY
+                particles[i].opacity = 0
+                particles[i].scale = 0
+            }
+        }
+    }
+}
+
+// MARK: - Motion Manager
+class MotionManager: ObservableObject {
+    private var motionManager = CMMotionManager()
+    @Published var pitch: Double = 0.0
+    @Published var roll: Double = 0.0
+    
+    init() {
+        self.motionManager.deviceMotionUpdateInterval = 1/60
+        self.start()
+    }
+    
+    func start() {
+        if motionManager.isDeviceMotionAvailable {
+            motionManager.startDeviceMotionUpdates(to: .main) { [weak self] motion, error in
+                guard let self = self, let motion = motion else { return }
+                
+                withAnimation(.linear(duration: 0.1)) {
+                    self.pitch = motion.attitude.pitch
+                    self.roll = motion.attitude.roll
+                }
+            }
+        }
+    }
+    
+    func stop() {
+        motionManager.stopDeviceMotionUpdates()
+    }
 }

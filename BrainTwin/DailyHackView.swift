@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import os
 
 struct DailyHackView: View {
     @StateObject private var viewModel: DailyHackViewModel
@@ -396,8 +397,8 @@ struct DailyHackView: View {
     }
 
     private func callTTSFunction(text: String, voice: String) async throws -> Data {
-        let supabaseURL = "https://yykxwlioounydxjikbjs.supabase.co"
-        let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3h3bGlvb3VueWR4amlrYmpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3NzU4NjYsImV4cCI6MjA3NTM1MTg2Nn0.u2U6xApU-ViMe1FO5TtRa31-y76nEgohsF1jJ63rk0Q"
+        let supabaseURL = Config.supabaseURL
+        let supabaseKey = Config.supabaseAnonKey
         
         guard let url = URL(string: "\(supabaseURL)/functions/v1/text-to-speech") else {
             throw URLError(.badURL)

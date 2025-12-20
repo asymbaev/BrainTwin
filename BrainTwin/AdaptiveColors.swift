@@ -50,8 +50,8 @@ extension Color {
     /// Secondary background for cards
     static let appCardBackground = Color.white
     
-    /// Card borders
-    static let appCardBorder = Color(hex: "#E8E8E8")
+    /// Card borders - Darker for visibility
+    static let appCardBorder = Color(hex: "#D4C5B9")
     
     /// Text - Primary
     static let appTextPrimary = Color(hex: "#2B1E14") // Dark brown (warm, not stark black)

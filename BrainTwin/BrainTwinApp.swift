@@ -2,13 +2,14 @@ import SwiftUI
 import SuperwallKit
 import UserNotifications
 import Supabase
+import os
 
 @main
 struct BrainTwinApp: App {
     private let paywallDelegate = PaywallEventDelegate()
 
     init() {
-        Superwall.configure(apiKey: "pk_Ned_vvu1JG8DJn_kq2HS5")
+        Superwall.configure(apiKey: Config.superwallAPIKey)
         Superwall.shared.delegate = paywallDelegate
     }
 

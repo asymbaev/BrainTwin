@@ -1,6 +1,7 @@
 import SwiftUI
 import Supabase
 import Functions
+import os
 
 struct MainTabView: View {
     @State private var selectedTab = 0
@@ -91,14 +92,14 @@ struct MainTabView: View {
                     }
                     .tag(1)
                     
-                    // Tab 3: Streaks
+                    // Tab 3: Progress
                     NavigationStack {
                         InsightsView()
                             .environmentObject(meterDataManager)
                     }
                     .tabItem {
-                        Image(systemName: "flame.fill")
-                        Text("Streaks")
+                        Image(systemName: "chart.line.uptrend.xyaxis")
+                        Text("Progress")
                     }
                     .tag(2)
                 }

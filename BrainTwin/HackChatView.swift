@@ -133,7 +133,7 @@ struct HackChatView: View {
                     
                     // Chat Messages
                     ForEach(viewModel.messages) { message in
-                        MessageBubble(message: message, isAnimated: true)
+                        MessageBubble(message: message, isAnimated: true, showQuickActions: false)
                             .padding(.horizontal)
                     }
                     
@@ -297,6 +297,60 @@ struct HackChatView: View {
     private func sendPrompt(_ prompt: String) {
         Task {
             await viewModel.sendMessage(prompt)
+        }
+    }
+}
+
+// MARK: - Message Bubble Component
+
+struct MessageBubble: View {
+    let message: ChatMessage
+    let isAnimated: Bool
+    let showQuickActions: Bool
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 0) {
+            if message.isUser { Spacer(minLength: 40) }
+
+            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 6) {
+                Text(message.text)
+                    .font(.system(size: 16, weight: .regular, design: .rounded))
+                    .foregroundColor(message.isUser ? .white : .appTextPrimary)
+                    .lineSpacing(4)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        Group {
+                            if message.isUser {
+                                // Gradient bubble for user
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.appAccent, Color.orange],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .shadow(color: Color.appAccent.opacity(0.3), radius: 8, x: 0, y: 4)
+                            } else {
+                                // Solid bubble for AI
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(Color.appCardBackground)
+                                    .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+                            }
+                        }
+                    )
+
+                Text(message.timestamp, style: .time)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundColor(.appTextSecondary.opacity(0.7))
+                    .padding(.horizontal, 4)
+            }
+            .scaleEffect(isAnimated ? 1.0 : 0.8)
+            .opacity(isAnimated ? 1.0 : 0)
+
+            if !message.isUser { Spacer(minLength: 40) }
         }
     }
 }

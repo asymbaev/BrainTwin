@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct DailyCheckInView: View {
     let onContinue: () -> Void
@@ -129,7 +130,7 @@ struct DailyCheckInView: View {
                     // ✅ Premium Continue button (shows when user types)
                     if !userResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Button {
-                            // TODO: Save user response to backend
+                            saveCheckInResponse()
                             onContinue()
                         } label: {
                             HStack(spacing: 8) {
@@ -162,6 +163,19 @@ struct DailyCheckInView: View {
                 isTextFieldFocused = true
             }
         }
+    }
+
+    // Save check-in response to UserDefaults for reflection history
+    private func saveCheckInResponse() {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateKey = dateFormatter.string(from: Date())
+
+        // Save to UserDefaults with date as key
+        let key = "checkIn_\(dateKey)"
+        UserDefaults.standard.set(userResponse, forKey: key)
+
+        print("💭 Saved check-in response for \(dateKey): \(userResponse)")
     }
 }
 

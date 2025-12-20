@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct AccountView: View {
     @StateObject private var supabase = SupabaseManager.shared

@@ -23,7 +23,7 @@ struct ImageService {
         let calendar = Calendar.current
         let dayOfYear = calendar.ordinality(of: .day, in: .year, for: Date()) ?? 1
         let index = dayOfYear % brainPositiveImages.count
-        
+
         // Add Unsplash parameters for optimization
         let baseUrl = brainPositiveImages[index]
         return "\(baseUrl)?w=1080&h=1920&fit=crop&q=80"

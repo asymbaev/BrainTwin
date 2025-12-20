@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import os
 
 // ✅ REMOVED @MainActor - file operations should NOT block UI
 class AudioCacheManager {

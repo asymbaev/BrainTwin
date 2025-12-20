@@ -2,6 +2,7 @@ import Foundation
 import Supabase
 import SwiftUI
 import Combine
+import os
 
 @MainActor
 class ProtocolRunnerViewModel: ObservableObject {

@@ -1,6 +1,7 @@
 import Foundation
 import Supabase
 import Combine
+import os
 
 @MainActor
 class ChatViewModel: ObservableObject {
@@ -29,7 +30,7 @@ class ChatViewModel: ObservableObject {
         errorMessage = nil
         
         do {
-            print("💬 Sending message to Brain Twin...")
+            Logger.networking.info("Sending message to Brain Twin")
             
             // Call chat-with-twin Edge Function
             struct ChatRequest: Encodable {
@@ -49,7 +50,7 @@ class ChatViewModel: ObservableObject {
                 options: FunctionInvokeOptions(body: request)
             )
             
-            print("✅ Got response from Brain Twin")
+            Logger.networking.info("Received response from Brain Twin")
             
             isLoading = false
             
@@ -57,7 +58,7 @@ class ChatViewModel: ObservableObject {
             await typeMessage(response.response, isUser: false)
             
         } catch {
-            print("❌ Chat error: \(error)")
+            Logger.networking.error("Chat error: \(error.localizedDescription)")
             errorMessage = "Failed to send message: \(error.localizedDescription)"
             
             // Add error message to chat

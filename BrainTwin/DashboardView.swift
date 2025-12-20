@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import Supabase
+import os
 
 struct DashboardView: View {
     @StateObject private var hackViewModel: DailyHackViewModel
@@ -56,6 +57,16 @@ struct DashboardView: View {
         default: return nil // System
         }
     }
+    
+    // MARK: - Responsive Sizing for Pro Max
+    // Uses min+percentage formula: stays ~200pt on Pro, grows to ~230pt on Pro Max
+    private var responsiveCardHeight: CGFloat {
+        max(200, UIScreen.main.bounds.height * 0.24)
+    }
+    
+    private var responsiveSpacing: CGFloat {
+        max(20, UIScreen.main.bounds.height * 0.025)
+    }
 
     var body: some View {
         NavigationStack {
@@ -67,7 +78,7 @@ struct DashboardView: View {
                 darkModeDepthGradient
 
                 ScrollView {
-                    VStack(spacing: 20) {
+                    VStack(spacing: responsiveSpacing) {
                         // Greeting header
                         greetingHeader
                             .padding(.horizontal, 20)
@@ -282,7 +293,7 @@ struct DashboardView: View {
             hackCardOverlay
             hackCardText
         }
-        .frame(height: 200)
+        .frame(height: responsiveCardHeight)
     }
     
     // Hack Card - Background Image
@@ -298,7 +309,7 @@ struct DashboardView: View {
             )
         }
         .aspectRatio(contentMode: .fill)
-        .frame(height: 200)
+        .frame(height: responsiveCardHeight)
         .clipped()
     }
     

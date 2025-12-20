@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import os
 
 struct ProfileImagePicker: View {
     @Environment(\.dismiss) var dismiss

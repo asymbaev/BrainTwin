@@ -2,6 +2,7 @@ import Foundation
 import Supabase
 import Combine
 import SwiftUI
+import os
 
 @MainActor
 class InsightsViewModel: ObservableObject {

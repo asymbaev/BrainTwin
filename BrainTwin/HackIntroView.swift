@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct HackIntroView: View {
     @StateObject private var viewModel = DailyHackViewModel()

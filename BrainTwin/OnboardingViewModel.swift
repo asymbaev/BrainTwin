@@ -2,6 +2,7 @@ import Foundation
 import Supabase
 import Combine
 import UserNotifications
+import os
 
 @MainActor
 class OnboardingViewModel: ObservableObject {

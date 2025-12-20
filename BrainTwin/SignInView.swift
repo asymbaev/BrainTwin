@@ -8,6 +8,7 @@
 
 import SwiftUI
 import AuthenticationServices
+import os
 
 struct SignInView: View {
     @StateObject private var supabase = SupabaseManager.shared

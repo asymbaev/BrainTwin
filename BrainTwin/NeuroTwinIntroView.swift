@@ -1,6 +1,7 @@
 import SwiftUI
 import AVKit
 import Combine
+import os
 
 // MARK: - Single Screen Intro with Phone Mockup & Video
 struct NeuroTwinIntroView: View {
@@ -25,7 +26,7 @@ struct NeuroTwinIntroView: View {
         ZStack {
             // Use app's background color
             Color.appBackground.ignoresSafeArea()
-            
+
             // Subtle gradient overlay for depth
                 RadialGradient(
                     colors: [
@@ -37,87 +38,90 @@ struct NeuroTwinIntroView: View {
                 endRadius: 400
             )
             .ignoresSafeArea()
-            
-            VStack(spacing: 0) {
-                Spacer()
-                    .frame(height: 60)  // Reduced from 80
-                
-                // Phone mockup
-                PhoneMockupView()
-                    .frame(height: 360)  // Reduced from 380
-                    .scaleEffect(phoneAppeared ? 1.0 : 0.85)
-                    .opacity(phoneAppeared ? 1.0 : 0)
-                
-                Spacer()
-                    .frame(height: 50)  // Reduced from 95
-                
-                // Headline - Responsive sizing
-                VStack(spacing: 4) {
-                    Text("You've been brainwashed.")
-                        .font(.system(size: 26, weight: .bold))  // Reduced from 32
-                        .tracking(0.3)
-                        .foregroundColor(.appTextPrimary)
-                        .minimumScaleFactor(0.8)  // Scales down if needed
-                        .lineLimit(1)
-                    
-                    Text("Time to reverse it.")
-                        .font(.system(size: 26, weight: .bold))  // Reduced from 32
-                        .tracking(0.3)
-                        .foregroundColor(.appTextPrimary)
-                        .minimumScaleFactor(0.8)  // Scales down if needed
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 24)  // Prevent edge overflow
-                .opacity(textAppeared ? 1.0 : 0)
-                .offset(y: textAppeared ? 0 : 20)
-                
-                Spacer()
-                    .frame(minHeight: 30)  // Reduced from 40
-                
-                // Get Started Button & Terms
-                VStack(spacing: 16) {
-                    Button("Get started") {
-                        onGetStarted()
-                    }
-                    .buttonStyle(OnboardingButtonStyle())
-                    .padding(.horizontal, 24)
-                    
-                    // Terms text
-                    VStack(spacing: 2) {
-                        Text("By continuing, you agree to our")
-                            .font(.system(size: 11))
-                            .foregroundColor(.appTextTertiary)
-                        
-                        HStack(spacing: 4) {
-                            Button(action: {
-                                if let url = URL(string: "https://asymbaev.github.io/neurohack-legal/terms.html") {
-                                    UIApplication.shared.open(url)
-                                }
-                            }) {
-                                Text("Terms of Service")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.appAccent)
-                            }
 
-                            Text("and")
+            GeometryReader { geometry in
+                VStack(spacing: 0) {
+                    // Top spacing - phone lower
+                    Spacer()
+                        .frame(height: geometry.size.height * 0.04)
+
+                    // Phone mockup
+                    PhoneMockupView()
+                        .frame(height: geometry.size.height * 0.48)
+                        .scaleEffect(phoneAppeared ? 1.0 : 0.85)
+                        .opacity(phoneAppeared ? 1.0 : 0)
+
+                    // Flexible spacer - centers text between phone and button
+                    Spacer()
+
+                    // Headline - centered between phone and button
+                    VStack(spacing: 0) {
+                        Text("You've been brainwashed.")
+                            .font(.system(size: 28, weight: .bold))
+                            .tracking(0.3)
+                            .foregroundColor(.appTextPrimary)
+                            .minimumScaleFactor(0.8)
+                            .lineLimit(1)
+
+                        Text("Time to reverse it.")
+                            .font(.system(size: 28, weight: .bold))
+                            .tracking(0.3)
+                            .foregroundColor(.appTextPrimary)
+                            .minimumScaleFactor(0.8)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 24)
+                    .opacity(textAppeared ? 1.0 : 0)
+                    .offset(y: textAppeared ? 0 : 20)
+
+                    // Flexible spacer - centers text between phone and button
+                    Spacer()
+
+                    // Get Started Button & Terms - PINNED TO BOTTOM
+                    VStack(spacing: 16) {
+                        Button("Get started") {
+                            onGetStarted()
+                        }
+                        .buttonStyle(OnboardingButtonStyle())
+                        .padding(.horizontal, 24)
+
+                        // Terms text
+                        VStack(spacing: 2) {
+                            Text("By continuing, you agree to our")
                                 .font(.system(size: 11))
                                 .foregroundColor(.appTextTertiary)
 
-                            Button(action: {
-                                if let url = URL(string: "https://asymbaev.github.io/neurohack-legal/privacy.html") {
-                                    UIApplication.shared.open(url)
+                            HStack(spacing: 4) {
+                                Button(action: {
+                                    if let url = URL(string: "https://asymbaev.github.io/neurohack-legal/terms.html") {
+                                        UIApplication.shared.open(url)
+                                    }
+                                }) {
+                                    Text("Terms of Service")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(.appAccent)
                                 }
-                            }) {
-                                Text("Privacy Policy")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.appAccent)
+
+                                Text("and")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.appTextTertiary)
+
+                                Button(action: {
+                                    if let url = URL(string: "https://asymbaev.github.io/neurohack-legal/privacy.html") {
+                                        UIApplication.shared.open(url)
+                                    }
+                                }) {
+                                    Text("Privacy Policy")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(.appAccent)
+                                }
                             }
                         }
                     }
+                    .opacity(buttonAppeared ? 1.0 : 0)
+                    .offset(y: buttonAppeared ? 0 : 20)
+                    .padding(.bottom, 40)  // Fixed bottom padding
                 }
-                .opacity(buttonAppeared ? 1.0 : 0)
-                .offset(y: buttonAppeared ? 0 : 20)
-                .padding(.bottom, 60)
             }
         }
         .preferredColorScheme(preferredColorScheme)
@@ -126,11 +130,11 @@ struct NeuroTwinIntroView: View {
             withAnimation(.spring(response: 0.8, dampingFraction: 0.75, blendDuration: 0)) {
                 phoneAppeared = true
             }
-            
+
             withAnimation(.easeOut(duration: 0.6).delay(0.3)) {
                 textAppeared = true
             }
-            
+
             withAnimation(.easeOut(duration: 0.6).delay(0.5)) {
                 buttonAppeared = true
             }

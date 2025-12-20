@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import os
 
 // MARK: - Profile Setup Loading Screen (Post-Purchase)
 struct ThankYouView: View {
