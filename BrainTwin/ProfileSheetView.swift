@@ -11,6 +11,13 @@ struct ProfileSheetView: View {
     @State private var showSubscriptionView = false
     @State private var showImagePicker = false
     @State private var profileImage: UIImage?
+
+    // Account deletion states
+    @State private var showDeleteWarning = false
+    @State private var showDeleteConfirmation = false
+    @State private var deleteConfirmationText = ""
+    @State private var isDeleting = false
+    @State private var deletionDate: String?
     
     private var userId: String {
         SupabaseManager.shared.userId ?? "Unknown"
@@ -39,6 +46,17 @@ struct ProfileSheetView: View {
                                 title: "Subscription",
                                 iconColor: .appAccent,
                                 action: { showSubscriptionView = true }
+                            )
+
+                            Divider()
+                                .background(Color.appTextSecondary.opacity(0.2))
+                                .padding(.horizontal, 20)
+
+                            menuItem(
+                                icon: "trash.fill",
+                                title: "Delete Account",
+                                iconColor: .red,
+                                action: { showDeleteWarning = true }
                             )
                         }
                         .background(Color.appCardBackground)
@@ -94,6 +112,27 @@ struct ProfileSheetView: View {
             }
         } message: {
             Text("Are you sure you want to sign out?")
+        }
+        .alert("Delete Account", isPresented: $showDeleteWarning) {
+            Button("Cancel", role: .cancel) { }
+            Button("Continue", role: .destructive) {
+                showDeleteConfirmation = true
+            }
+        } message: {
+            Text("Your account will be scheduled for deletion in 14 days. You can cancel by signing back in within 14 days. All your data will be permanently deleted after the grace period.")
+        }
+        .alert("Confirm Deletion", isPresented: $showDeleteConfirmation) {
+            TextField("Type DELETE to confirm", text: $deleteConfirmationText)
+                .autocorrectionDisabled()
+            Button("Cancel", role: .cancel) {
+                deleteConfirmationText = ""
+            }
+            Button("Delete Account", role: .destructive) {
+                deleteAccount()
+            }
+            .disabled(deleteConfirmationText != "DELETE")
+        } message: {
+            Text("Type DELETE to permanently delete your account. This cannot be undone after 14 days.")
         }
         .sheet(isPresented: $showSubscriptionView) {
             SubscriptionManagementView()
@@ -300,7 +339,7 @@ struct ProfileSheetView: View {
     }
     
     // MARK: - Sign Out
-    
+
     private func signOut() {
         Task {
             do {
@@ -308,6 +347,48 @@ struct ProfileSheetView: View {
                 dismiss()
             } catch {
                 print("❌ Sign out error: \(error)")
+            }
+        }
+    }
+
+    // MARK: - Delete Account
+
+    private func deleteAccount() {
+        guard deleteConfirmationText == "DELETE" else {
+            print("⚠️ Delete confirmation text mismatch")
+            return
+        }
+
+        isDeleting = true
+
+        Task {
+            do {
+                let response = try await SupabaseManager.shared.requestAccountDeletion()
+                print("✅ Account deletion requested successfully")
+
+                // Format deletion date for display
+                let dateFormatter = ISO8601DateFormatter()
+                if let date = dateFormatter.date(from: response.deletionDate) {
+                    let displayFormatter = DateFormatter()
+                    displayFormatter.dateStyle = .long
+                    displayFormatter.timeStyle = .none
+                    deletionDate = displayFormatter.string(from: date)
+                }
+
+                // Reset confirmation text
+                deleteConfirmationText = ""
+                isDeleting = false
+
+                // Sign out user
+                try await SupabaseManager.shared.signOut()
+                dismiss()
+
+            } catch {
+                print("❌ Account deletion error: \(error)")
+                deleteConfirmationText = ""
+                isDeleting = false
+
+                // Show error to user (optional - you can add error alert if needed)
             }
         }
     }

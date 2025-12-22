@@ -138,13 +138,17 @@ struct MembershipDetailsView: View {
                     // Terms and Privacy
                     HStack(spacing: 16) {
                         Button("Terms of use") {
-                            // Handle terms tap
+                            if let url = URL(string: "https://asymbaev.github.io/neurohack-legal/terms.html") {
+                                UIApplication.shared.open(url)
+                            }
                         }
                         .font(.caption)
                         .foregroundColor(.appTextSecondary)
                         
                         Button("Privacy policy") {
-                            // Handle privacy tap
+                            if let url = URL(string: "https://asymbaev.github.io/neurohack-legal/privacy.html") {
+                                UIApplication.shared.open(url)
+                            }
                         }
                         .font(.caption)
                         .foregroundColor(.appTextSecondary)

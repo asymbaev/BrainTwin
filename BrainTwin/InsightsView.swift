@@ -12,7 +12,6 @@ struct InsightsView: View {
     @State private var allCompletedDates: [Date] = []  // All dates for longest streak calculation
     @State private var isLoading = false
     @State private var currentMonth = Date()
-    @State private var showAchievements = false
     @State private var animateProgress = false
     @State private var animateStats = false
 
@@ -116,26 +115,6 @@ struct InsightsView: View {
             }
 
             Spacer()
-
-            // Share button
-            Button(action: {}) {
-                ZStack {
-                    Circle()
-                        .fill(Color.appCardBackground)
-                        .frame(width: 44, height: 44)
-                        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [Color.appAccent, Color.orange],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                }
-            }
         }
     }
 
@@ -391,26 +370,10 @@ struct InsightsView: View {
 
     private var achievementGallery: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Recent Achievements")
-                    .font(.headline.bold())
-                    .foregroundColor(.appTextPrimary)
-
-                Spacer()
-
-                Button(action: { showAchievements.toggle() }) {
-                    Text("View All")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [Color.appAccent, Color.orange],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                }
-            }
-            .padding(.horizontal, 20)
+            Text("Recent Achievements")
+                .font(.headline.bold())
+                .foregroundColor(.appTextPrimary)
+                .padding(.horizontal, 20)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {

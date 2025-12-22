@@ -600,10 +600,41 @@ class SupabaseManager: ObservableObject {
     /// Download profile picture from URL
     func downloadProfilePicture(from urlString: String) async throws -> UIImage? {
         guard let url = URL(string: urlString) else { return nil }
-        
+
         let (data, _) = try await URLSession.shared.data(from: url)
         return UIImage(data: data)
     }
-    
-    
+
+    // MARK: - Account Deletion
+
+    struct AccountDeletionResponse: Decodable {
+        let message: String
+        let deletionDate: String
+        let gracePeriodDays: Int
+    }
+
+    /// Request account deletion (14-day grace period)
+    func requestAccountDeletion() async throws -> AccountDeletionResponse {
+        guard let userId = userId else {
+            throw NSError(
+                domain: "SupabaseManager",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "No user ID found"]
+            )
+        }
+
+        print("🗑️ Requesting account deletion for user: \(userId)")
+
+        let response: AccountDeletionResponse = try await client.functions.invoke(
+            "request-account-deletion",
+            options: FunctionInvokeOptions(
+                body: ["userId": userId]
+            )
+        )
+
+        print("✅ Account deletion scheduled: \(response.deletionDate)")
+        return response
+    }
+
+
 }

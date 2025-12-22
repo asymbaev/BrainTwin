@@ -2573,24 +2573,27 @@ struct FeedbackStatsView: View {
 // MARK: - Life Without Hacks View (Red/Declining)
 
 struct LifeWithoutHacksView: View {
-    let struggle: String
+    let struggle: String // e.g. "Procrastination"
     let goal: String
     let onSkip: () -> Void
-    let onBack: () -> Void // ✅ Added onBack parameter
+    let onBack: () -> Void // ✅ Added onBack param
 
     @State private var animationProgress: CGFloat = 0
     @State private var showText = false
+    
+    // ✅ State to hold the work item so we can cancel it
+    @State private var autoAdvanceTask: DispatchWorkItem?
 
-    // 3 declining lines with different rates
-    let line1Points: [CGFloat] = [0.70, 0.65, 0.55, 0.45, 0.38, 0.33, 0.31, 0.30]
-    let line2Points: [CGFloat] = [0.65, 0.58, 0.48, 0.38, 0.32, 0.28, 0.26, 0.25]
-    let line3Points: [CGFloat] = [0.60, 0.52, 0.42, 0.32, 0.26, 0.22, 0.21, 0.20]
+    // Downward trending lines
+    let line1Points: [CGFloat] = [0.70, 0.65, 0.55, 0.45, 0.38, 0.33, 0.30, 0.29]
+    let line2Points: [CGFloat] = [0.65, 0.60, 0.50, 0.40, 0.35, 0.30, 0.28, 0.27]
+    let line3Points: [CGFloat] = [0.60, 0.55, 0.45, 0.35, 0.30, 0.25, 0.22, 0.20]
 
-    // Red/orange color scheme
+    // Red/warning color scheme
     let lineColors: [Color] = [
-        Color(red: 0.91, green: 0.30, blue: 0.24), // #E74C3C bright red
-        Color(red: 0.90, green: 0.49, blue: 0.13), // #E67E22 orange-red
-        Color(red: 0.95, green: 0.61, blue: 0.07)  // #F39C12 orange
+        Color(red: 0.90, green: 0.20, blue: 0.20), // Bright Red
+        Color(red: 0.80, green: 0.30, blue: 0.30),
+        Color(red: 0.70, green: 0.40, blue: 0.40)
     ]
 
     var metrics: StruggleMetrics {
@@ -2602,14 +2605,14 @@ struct LifeWithoutHacksView: View {
             // Adaptive background
             Color.appBackground
                 .ignoresSafeArea()
-
+            
             VStack(spacing: 0) {
                 OnboardingBackButton(action: onBack)
-
+                
                 Spacer()
 
-                // Personalized headline
-                Text("Without daily neuroscience hacks...")
+                // Headline
+                Text("Without BrainTwin...")
                     .font(.system(size: 26, weight: .bold))
                     .foregroundColor(.appTextPrimary)
                     .multilineTextAlignment(.center)
@@ -2618,11 +2621,11 @@ struct LifeWithoutHacksView: View {
                     .animation(.easeIn(duration: 0.5), value: showText)
                     .padding(.bottom, 32)
 
-                // Multi-line graph with legend
+                // Multi-line graph
                 MultiLineGraphView(
                     lines: [line1Points, line2Points, line3Points],
                     colors: lineColors,
-                    labels: [metrics.metric1, metrics.metric2, metrics.metric3],
+                    labels: ["Focus", "Clarity", "Progress"],
                     animationProgress: animationProgress
                 )
                 .frame(height: 320)
@@ -2630,31 +2633,54 @@ struct LifeWithoutHacksView: View {
 
                 Spacer()
 
-                // Skip button
+                // Skip button (secondary style)
                 Button {
+                    cancelAutoAdvance()
                     onSkip()
                 } label: {
-                    Text("Skip")
-                        .font(.body)
-                        .foregroundColor(.gray)
+                    Text("Skip Animation")
+                        .font(.subheadline)
+                        .foregroundColor(.appTextSecondary)
+                        .padding()
                 }
                 .padding(.bottom, 60)
             }
         }
         .onAppear {
             showText = true
-
-            // Animate graph drawing
+            
+            // Animate graphs
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 withAnimation(.easeInOut(duration: 2.0)) {
                     animationProgress = 1.0
                 }
             }
 
-            // Auto-advance after animation
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-                onSkip()
-            }
+            scheduleAutoAdvance()
+        }
+        .onDisappear {
+            // ✅ CRITICAL FIX: Cancel timer if user leaves screen manually
+            cancelAutoAdvance()
+        }
+    }
+    
+    private func scheduleAutoAdvance() {
+        // Cancel any existing
+        cancelAutoAdvance()
+        
+        let task = DispatchWorkItem {
+            onSkip()
+        }
+        autoAdvanceTask = task
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0, execute: task)
+    }
+    
+    private func cancelAutoAdvance() {
+        if let task = autoAdvanceTask {
+            print("🛑 Cancelling auto-advance for LifeWithoutHacks")
+            task.cancel()
+            autoAdvanceTask = nil
         }
     }
 }
@@ -3112,95 +3138,115 @@ struct UnlockableCard: View {
 
     var body: some View {
         ZStack {
-            // 1. CARD BACKGROUND (Always clean white base)
+            // 1. LIQUID GLASS BACKGROUND
             RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
-                .fill(Color.white)
-                .shadow(
-                    color: Color(hex: "3E3322").opacity(isUnlocked ? 0.12 : 0.05),
-                    radius: isUnlocked ? 20 : 10,
-                    x: 0,
-                    y: isUnlocked ? 8 : 4
+                .fill(Color.white.opacity(0.1)) // Subtle base transparency
+                .background(
+                    .ultraThinMaterial,
+                    in: RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                 )
-            
-            // 2. CONTENT LAYER (Emoji + Text)
+                // GLOSS SHEEN
+                .overlay(
+                    LinearGradient(
+                        colors: [.white.opacity(0.4), .white.opacity(0.1), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .mask(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+                )
+                // COLORED GLOW SHADOW (Visibility Booster)
+                .shadow(
+                    color: Color.appAccent.opacity(isUnlocked ? 0.0 : 0.25),
+                    radius: 20,
+                    x: 0,
+                    y: 10
+                )
+                .shadow(
+                    color: Color.white.opacity(0.2), // Rim light shadow
+                    radius: 1,
+                    x: 0,
+                    y: -1
+                )
+
+            // 2. CONTENT LAYER
             VStack(spacing: 16) {
                 Text(emoji)
-                    .font(.system(size: isUnlocked ? 48 : 52)) // Scale down slightly on unlock
+                    .font(.system(size: isUnlocked ? 48 : 52))
                 
                 if isUnlocked {
                     Text(text)
                         .font(.system(size: 17, weight: .medium))
-                        .foregroundColor(Color(hex: "2D2418"))
+                        .foregroundColor(Color.appTextPrimary) // Use app text color for contrast
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
                         .lineSpacing(2)
                         .transition(.scale(scale: 0.9).combined(with: .opacity).animation(.spring(response: 0.3, dampingFraction: 0.7)))
                 } else {
-                     // Locked state text placeholder
                     Text(text)
                         .font(.system(size: 17, weight: .medium))
-                        .foregroundColor(Color(hex: "2D2418").opacity(0.3))
+                        .foregroundColor(Color.appTextPrimary.opacity(0.3))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
                         .redacted(reason: .placeholder)
                 }
             }
-            // BLUR SHATTER: 12px blur -> 0px instantly on unlock
             .blur(radius: isUnlocked ? 0 : 12)
             .opacity(isUnlocked ? 1.0 : 0.7)
             
-            // 3. FROSTED GUMMY OVERLAY (Locked State)
+            // 3. FROSTED OVERLAY (Locked State)
             if !isUnlocked {
                 RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
-                    .fill(Color(hex: "FDFBF7").opacity(0.4))
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+                    .fill(Color.black.opacity(0.05)) // Slight darken to pop the lock
                     .overlay(
                         VStack(spacing: 8) {
                             if !isReady {
                                 Image(systemName: "lock.fill")
                                     .font(.system(size: 24))
-                                    .foregroundColor(Color(hex: "B0ADA5"))
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .shadow(radius: 5)
                             } else {
+                                // PULSING TAP PROMPT
                                 Text("Tap to reveal")
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundColor(Color(hex: "B0ADA5"))
-                                    .tracking(0.5)
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        Capsule()
+                                            .fill(Color.appAccent.opacity(0.8))
+                                            .shadow(color: Color.appAccent.opacity(0.5), radius: 8, x: 0, y: 0)
+                                    )
+                                    .scaleEffect(isPressed ? 0.95 : 1.05)
+                                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isPressed)
                             }
                         }
                     )
-                    // Immediate removal on unlock for "Shatter" effect
-                    .transition(.identity) 
+                    .transition(.opacity)
             }
         }
         .frame(width: cardWidth, height: cardHeight)
+        // LIQUID BORDER
         .overlay(
             RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
-                .stroke(isUnlocked ? Color.appAccent.opacity(0.3) : Color.white.opacity(0.5), lineWidth: 1)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.6), .white.opacity(0.1), .white.opacity(0.3)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.5
+                )
         )
-        // HYPER-SPRING PHYSICS 🍬
-        // 1. Locked: Default scale 0.95 (Recessed)
-        // 2. Press: Scale 0.90 (Compression)
-        // 3. Unlocked: Scale 1.0 (Expansion)
-        .scaleEffect(
-            isUnlocked ? 1.0 : (isPressed ? 0.90 : 0.95)
-        )
-        .animation(
-            isPressed 
-                ? .interactiveSpring(response: 0.3, dampingFraction: 0.6) // Squishy Press
-                : .spring(response: 0.4, dampingFraction: 0.5),          // Bouncy Release
-            value: isPressed
-        )
-        .animation(
-            .spring(response: 0.4, dampingFraction: 0.5), // Bouncy Unlock
-            value: isUnlocked
-        )
+        // INTERACTION PHYSICS
+        .scaleEffect(isUnlocked ? 1.0 : (isPressed ? 0.96 : 1.0))
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
+        .animation(.spring(response: 0.4, dampingFraction: 0.6), value: isUnlocked)
         .onLongPressGesture(minimumDuration: 0, pressing: { pressing in
             if isReady && !isUnlocked {
                 isPressed = pressing
             }
         }, perform: {
-            // Action handled in onTapGesture for better reliability or here?
-            // Using logic: Pressing handled visual state. Tap triggers unlock.
+            // Hanlded in simultaneousGesture
         })
         .simultaneousGesture(
             TapGesture().onEnded {
@@ -3233,6 +3279,9 @@ struct UnlockCardsView: View {
     @State private var isCard2Ready = false
     @State private var card1Confetti: [ConfettiParticle] = []
     @State private var card2Confetti: [ConfettiParticle] = []
+    
+    // ✅ Cancellable auto-advance task
+    @State private var autoAdvanceTask: DispatchWorkItem?
 
     var bothCardsUnlocked: Bool {
         isCard1Unlocked && isCard2Unlocked
@@ -3296,6 +3345,7 @@ struct UnlockCardsView: View {
                 VStack(spacing: 16) {
                     // Skip Button only (Cards auto-advance)
                     Button {
+                        cancelAutoAdvance()
                         onNext()
                     } label: {
                         Text("Skip")
@@ -3308,6 +3358,9 @@ struct UnlockCardsView: View {
                 .padding(.bottom, 50)
             }
             .padding(.top, 24)
+        }
+        .onDisappear {
+            cancelAutoAdvance()
         }
     }
 
@@ -3331,9 +3384,20 @@ struct UnlockCardsView: View {
         }
         createConfetti(for: .card2)
         
-        // Auto-advance after animation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+        // Auto-advance with cancellable task
+        cancelAutoAdvance()
+        let task = DispatchWorkItem {
             onNext()
+        }
+        autoAdvanceTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: task)
+    }
+    
+    private func cancelAutoAdvance() {
+        if let task = autoAdvanceTask {
+            print("🛑 Cancelling auto-advance for UnlockCardsView")
+            task.cancel()
+            autoAdvanceTask = nil
         }
     }
 
